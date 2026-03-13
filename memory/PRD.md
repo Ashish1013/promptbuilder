@@ -36,14 +36,15 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Implemented global template APIs with seeded defaults (Agent Persona, Language Guidelines, Call Flow, Guardrails)
 - Implemented deterministic compile engine with placeholder replacement and section snippet output
 - Implemented draft CRUD in MongoDB with role-based restrictions and timestamps
-- Implemented builder UX: section/subsection toggles, variable forms, raw editors, live split-pane preview
+- Refactored builder UX to true **three-pane workflow**: left library selection, middle configuration workspace, right live compiled preview/export
+- Added library-side search and section/subsection selection controls synced to config + preview panes
+- Implemented builder UX: variable forms, raw editors, and live deterministic prompt rendering
 - Implemented exports: copy prompt, copy snippets (JSON), and JSON file download
 - Implemented template management view with admin-only editing controls
 
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
-- Add search/filter within large section libraries
 - Add validation UI for required variables before save/export
 
 ### P1 (Important)
@@ -59,6 +60,6 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 ## Next Tasks List
 1. Implement required-variable validation and inline error markers in builder
 2. Add autosave draft mode with last-saved indicator
-3. Add section search and quick-jump navigation in left pane
+3. Add quick-jump navigation by selected section in middle pane
 4. Add template change history log for admin governance
 5. Add downloadable markdown (`.md`) export in addition to JSON
