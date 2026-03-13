@@ -2,14 +2,16 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, FastAPI, Header, HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient
+from passlib.context import CryptContext
 from pydantic import BaseModel, ConfigDict, Field
+from jose import JWTError, jwt
 from starlette.middleware.cors import CORSMiddleware
 
 
@@ -19,6 +21,11 @@ load_dotenv(ROOT_DIR / ".env")
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
+
+JWT_SECRET_KEY = os.environ["JWT_SECRET_KEY"]
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_HOURS = 12
+password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 app = FastAPI(title="ReachAll Prompt Builder API")
 api_router = APIRouter(prefix="/api")
@@ -94,6 +101,8 @@ class PromptDraft(PromptDraftPayload):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_by_role: Literal["admin", "editor", "viewer"] = "editor"
+    created_by_username: str = ""
+    updated_by_username: str = ""
 
 
 class CompilePromptRequest(BaseModel):
@@ -113,24 +122,70 @@ class RolesResponse(BaseModel):
     roles: Dict[str, Dict[str, bool]]
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserCreateRequest(BaseModel):
+    username: str
+    full_name: str
+    password: str
+    role: Literal["admin", "editor", "viewer"]
+
+
+class UserRoleUpdateRequest(BaseModel):
+    role: Literal["admin", "editor", "viewer"]
+
+
+class UserPublic(BaseModel):
+    id: str
+    username: str
+    full_name: str
+    role: Literal["admin", "editor", "viewer"]
+    created_at: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserPublic
+
+
+class UserActivityItem(BaseModel):
+    draft_id: str
+    draft_title: str
+    customer_name: str
+    updated_at: str
+    updated_by_role: Literal["admin", "editor", "viewer"]
+
+
+class UserActivityResponse(BaseModel):
+    username: str
+    activities: List[UserActivityItem]
+
+
 ROLE_PERMISSIONS = {
     "admin": {
         "can_manage_templates": True,
         "can_create_prompts": True,
         "can_update_prompts": True,
         "can_delete_prompts": True,
+        "can_manage_users": True,
     },
     "editor": {
         "can_manage_templates": False,
         "can_create_prompts": True,
         "can_update_prompts": True,
         "can_delete_prompts": True,
+        "can_manage_users": False,
     },
     "viewer": {
         "can_manage_templates": False,
         "can_create_prompts": False,
         "can_update_prompts": False,
         "can_delete_prompts": False,
+        "can_manage_users": False,
     },
 }
 
@@ -143,6 +198,66 @@ def normalize_role(role_value: Optional[str]) -> str:
 def enforce_role(user_role: str, allowed_roles: List[str]) -> None:
     if user_role not in allowed_roles:
         raise HTTPException(status_code=403, detail="You do not have permission for this action.")
+
+
+def normalize_username(username: str) -> str:
+    return username.strip().lower()
+
+
+def hash_password(password: str) -> str:
+    return password_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return password_context.verify(plain_password, hashed_password)
+
+
+def create_access_token(username: str, role: str) -> str:
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_HOURS)
+    payload = {
+        "sub": username,
+        "role": role,
+        "exp": int(expires_at.timestamp()),
+    }
+    return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+async def ensure_default_admin_user() -> None:
+    user_count = await db.users.count_documents({})
+    if user_count > 0:
+        return
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    default_admin = {
+        "id": str(uuid.uuid4()),
+        "username": "admin",
+        "full_name": "ReachAll Admin",
+        "password_hash": hash_password("admin123"),
+        "role": "admin",
+        "created_at": now_iso,
+    }
+    await db.users.insert_one(default_admin)
+
+
+async def get_current_user_from_authorization(authorization: Optional[str]) -> UserPublic:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized.")
+
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.") from exc
+
+    username = normalize_username(payload.get("sub", ""))
+    if not username:
+        raise HTTPException(status_code=401, detail="Invalid token payload.")
+
+    user_doc = await db.users.find_one({"username": username}, {"_id": 0, "password_hash": 0})
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    return UserPublic(**user_doc)
 
 
 def get_default_templates() -> List[PromptSectionTemplate]:
@@ -389,6 +504,121 @@ async def root() -> MessageResponse:
     return MessageResponse(message="ReachAll Prompt Builder API")
 
 
+@api_router.post("/auth/login", response_model=AuthResponse)
+async def login_user(payload: LoginRequest) -> AuthResponse:
+    await ensure_default_admin_user()
+    username = normalize_username(payload.username)
+    user_doc = await db.users.find_one({"username": username}, {"_id": 0})
+
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    if not verify_password(payload.password, user_doc.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    token = create_access_token(user_doc["username"], user_doc["role"])
+    user_public = UserPublic(**{key: value for key, value in user_doc.items() if key != "password_hash"})
+    return AuthResponse(access_token=token, user=user_public)
+
+
+@api_router.get("/auth/me", response_model=UserPublic)
+async def get_current_user_profile(authorization: Optional[str] = Header(default=None)) -> UserPublic:
+    return await get_current_user_from_authorization(authorization)
+
+
+@api_router.get("/activity/me", response_model=UserActivityResponse)
+async def get_my_activity(authorization: Optional[str] = Header(default=None)) -> UserActivityResponse:
+    current_user = await get_current_user_from_authorization(authorization)
+
+    draft_docs = (
+        await db.prompt_drafts.find(
+            {
+                "$or": [
+                    {"created_by_username": current_user.username},
+                    {"updated_by_username": current_user.username},
+                ]
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "title": 1,
+                "customer_name": 1,
+                "updated_at": 1,
+                "updated_by_role": 1,
+            },
+        )
+        .sort("updated_at", -1)
+        .to_list(25)
+    )
+
+    activities = [
+        UserActivityItem(
+            draft_id=draft.get("id", ""),
+            draft_title=draft.get("title", "Untitled Prompt"),
+            customer_name=draft.get("customer_name", ""),
+            updated_at=draft.get("updated_at", datetime.now(timezone.utc).isoformat()),
+            updated_by_role=normalize_role(draft.get("updated_by_role", "editor")),
+        )
+        for draft in draft_docs
+    ]
+
+    return UserActivityResponse(username=current_user.username, activities=activities)
+
+
+@api_router.get("/users", response_model=List[UserPublic])
+async def list_users(authorization: Optional[str] = Header(default=None)) -> List[UserPublic]:
+    await ensure_default_admin_user()
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin"])
+
+    user_docs = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(200)
+    return [UserPublic(**doc) for doc in user_docs]
+
+
+@api_router.post("/users", response_model=UserPublic)
+async def create_user(payload: UserCreateRequest, authorization: Optional[str] = Header(default=None)) -> UserPublic:
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin"])
+
+    username = normalize_username(payload.username)
+    existing_user = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    user_doc = {
+        "id": str(uuid.uuid4()),
+        "username": username,
+        "full_name": payload.full_name.strip(),
+        "password_hash": hash_password(payload.password),
+        "role": payload.role,
+        "created_at": now_iso,
+    }
+    await db.users.insert_one(user_doc)
+
+    return UserPublic(**{key: value for key, value in user_doc.items() if key != "password_hash"})
+
+
+@api_router.put("/users/{user_id}/role", response_model=UserPublic)
+async def update_user_role(
+    user_id: str,
+    payload: UserRoleUpdateRequest,
+    authorization: Optional[str] = Header(default=None),
+) -> UserPublic:
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin"])
+
+    result = await db.users.update_one({"id": user_id}, {"$set": {"role": payload.role}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    user_doc = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return UserPublic(**user_doc)
+
+
 @api_router.get("/roles", response_model=RolesResponse)
 async def get_roles_matrix() -> RolesResponse:
     return RolesResponse(roles=ROLE_PERMISSIONS)
@@ -460,6 +690,7 @@ async def get_prompt_draft(draft_id: str) -> PromptDraft:
 async def create_prompt_draft(
     payload: PromptDraftPayload,
     x_user_role: Optional[str] = Header(default="viewer"),
+    x_user_name: Optional[str] = Header(default=""),
 ) -> PromptDraft:
     user_role = normalize_role(x_user_role)
     enforce_role(user_role, ["admin", "editor"])
@@ -472,6 +703,8 @@ async def create_prompt_draft(
     draft_data["created_at"] = now_iso
     draft_data["updated_at"] = now_iso
     draft_data["updated_by_role"] = user_role
+    draft_data["created_by_username"] = normalize_username(x_user_name or "unknown")
+    draft_data["updated_by_username"] = normalize_username(x_user_name or "unknown")
 
     prompt_draft = PromptDraft(**draft_data)
 
@@ -484,6 +717,7 @@ async def update_prompt_draft(
     draft_id: str,
     payload: PromptDraftPayload,
     x_user_role: Optional[str] = Header(default="viewer"),
+    x_user_name: Optional[str] = Header(default=""),
 ) -> PromptDraft:
     user_role = normalize_role(x_user_role)
     enforce_role(user_role, ["admin", "editor"])
@@ -493,6 +727,7 @@ async def update_prompt_draft(
     updated_doc["compiled_prompt"] = payload.compiled_prompt or compile_result.compiled_prompt
     updated_doc["updated_at"] = datetime.now(timezone.utc).isoformat()
     updated_doc["updated_by_role"] = user_role
+    updated_doc["updated_by_username"] = normalize_username(x_user_name or "unknown")
 
     result = await db.prompt_drafts.update_one({"id": draft_id}, {"$set": updated_doc})
     if result.matched_count == 0:
@@ -560,6 +795,11 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+async def startup_seed_data() -> None:
+    await ensure_default_admin_user()
 
 
 @app.on_event("shutdown")

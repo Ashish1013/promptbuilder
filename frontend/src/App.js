@@ -3,33 +3,97 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/layout/AppShell";
+import {
+  AUTH_TOKEN_STORAGE_KEY,
+  clearAuthSession,
+  fetchMe,
+  getAuthUserFromStorage,
+  saveAuthSession,
+} from "@/lib/api";
+import ActivityPage from "@/pages/ActivityPage";
 import BuilderPage from "@/pages/BuilderPage";
 import DraftsPage from "@/pages/DraftsPage";
-import RoleAccessPage from "@/pages/RoleAccessPage";
+import LoginPage from "@/pages/LoginPage";
 import TemplatesPage from "@/pages/TemplatesPage";
+import UserManagementPage from "@/pages/UserManagementPage";
 
-const ROLE_STORAGE_KEY = "reachall-current-role";
+const ProtectedApp = ({ currentUser, onLogout }) => {
+  return (
+    <div className="app-shell" data-testid="reachall-prompt-builder-root">
+      <AppShell currentUser={currentUser} onLogout={onLogout}>
+        <Routes>
+          <Route path="/" element={<Navigate to="/activity" replace />} />
+          <Route path="/activity" element={<ActivityPage currentUser={currentUser} />} />
+          <Route path="/builder" element={<BuilderPage currentUser={currentUser} />} />
+          <Route path="/templates" element={<TemplatesPage role={currentUser.role} />} />
+          <Route path="/drafts" element={<DraftsPage role={currentUser.role} />} />
+          <Route path="/users" element={<UserManagementPage currentUser={currentUser} />} />
+          <Route path="*" element={<Navigate to="/activity" replace />} />
+        </Routes>
+      </AppShell>
+    </div>
+  );
+};
 
 function App() {
-  const [role, setRole] = useState(() => localStorage.getItem(ROLE_STORAGE_KEY) || "editor");
+  const [currentUser, setCurrentUser] = useState(() => getAuthUserFromStorage());
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem(ROLE_STORAGE_KEY, role);
-  }, [role]);
+    const hydrateSession = async () => {
+      const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+      const storedUser = getAuthUserFromStorage();
+
+      if (!token || !storedUser) {
+        setAuthLoading(false);
+        return;
+      }
+
+      try {
+        const user = await fetchMe();
+        saveAuthSession(token, user);
+        setCurrentUser(user);
+      } catch (error) {
+        clearAuthSession();
+        setCurrentUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    hydrateSession();
+  }, []);
+
+  const handleLoginSuccess = (token, user) => {
+    saveAuthSession(token, user);
+    setCurrentUser(user);
+  };
+
+  const handleLogout = () => {
+    clearAuthSession();
+    setCurrentUser(null);
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center" data-testid="auth-loading-state">
+        <p className="text-base font-semibold text-slate-700">Loading session...</p>
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
-      <div className="app-shell" data-testid="reachall-prompt-builder-root">
-        <AppShell role={role} onRoleChange={setRole}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/builder" replace />} />
-            <Route path="/builder" element={<BuilderPage role={role} />} />
-            <Route path="/templates" element={<TemplatesPage role={role} />} />
-            <Route path="/drafts" element={<DraftsPage role={role} />} />
-            <Route path="/access" element={<RoleAccessPage role={role} />} />
-          </Routes>
-        </AppShell>
-      </div>
+      <Routes>
+        <Route
+          path="/login"
+          element={currentUser ? <Navigate to="/activity" replace /> : <LoginPage onLoginSuccess={handleLoginSuccess} />}
+        />
+        <Route
+          path="/*"
+          element={currentUser ? <ProtectedApp currentUser={currentUser} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+        />
+      </Routes>
       <Toaster richColors position="top-right" data-testid="global-toast-container" />
     </BrowserRouter>
   );

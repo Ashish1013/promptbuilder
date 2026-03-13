@@ -1,21 +1,25 @@
 import { NavLink } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
+  { label: "Activity", path: "/activity", testId: "nav-activity-link" },
   { label: "Builder", path: "/builder", testId: "nav-builder-link" },
   { label: "Template Library", path: "/templates", testId: "nav-templates-link" },
   { label: "Drafts", path: "/drafts", testId: "nav-drafts-link" },
-  { label: "Role Access", path: "/access", testId: "nav-access-link" },
+  { label: "Team Roles", path: "/users", testId: "nav-users-link" },
 ];
 
-export const AppShell = ({ children, role, onRoleChange }) => {
+export const AppShell = ({ children, currentUser, onLogout }) => {
+  const visibleNavItems = NAV_ITEMS.filter((item) => item.path !== "/users" || currentUser?.role === "admin");
+
   return (
     <div className="min-h-screen">
       <header
         className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur-md"
         data-testid="app-shell-header"
       >
-        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-4 px-6 py-4 md:px-8 lg:px-10">
+        <div className="mx-auto grid max-w-[1800px] gap-4 px-6 py-4 md:px-8 lg:grid-cols-[280px_1fr_auto] lg:px-10">
           <div className="space-y-1" data-testid="app-branding-block">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500" data-testid="app-brand-eyebrow">
               ReachAll Internal Workspace
@@ -26,7 +30,7 @@ export const AppShell = ({ children, role, onRoleChange }) => {
           </div>
 
           <nav className="flex flex-wrap items-center gap-2" data-testid="primary-navigation-group">
-            {NAV_ITEMS.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
@@ -43,24 +47,16 @@ export const AppShell = ({ children, role, onRoleChange }) => {
             ))}
           </nav>
 
-          <div className="flex items-center gap-3" data-testid="role-control-container">
-            <Badge className="border-slate-300 bg-white text-slate-700" data-testid="current-role-badge">
-              Current Role: {role}
+          <div className="flex flex-wrap items-center justify-end gap-2" data-testid="user-control-container">
+            <Badge className="max-w-[200px] border-slate-300 bg-white text-slate-700" data-testid="current-user-badge">
+              <span className="truncate">{currentUser?.username}</span>
             </Badge>
-            <label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500" htmlFor="role-selector" data-testid="role-selector-label">
-              Switch Role
-            </label>
-            <select
-              id="role-selector"
-              value={role}
-              onChange={(event) => onRoleChange(event.target.value)}
-              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 outline-none ring-indigo-500 transition-colors duration-200 focus:ring-2"
-              data-testid="role-selector-input"
-            >
-              <option value="admin">Admin</option>
-              <option value="editor">Editor</option>
-              <option value="viewer">Viewer</option>
-            </select>
+            <Badge className="border-slate-300 bg-white text-slate-700" data-testid="current-role-badge">
+              {currentUser?.role}
+            </Badge>
+            <Button type="button" variant="outline" onClick={onLogout} data-testid="logout-button">
+              Logout
+            </Button>
           </div>
         </div>
       </header>

@@ -5,12 +5,11 @@ import { Save, Download, Copy } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { LibraryPane } from "@/components/prompt-builder/LibraryPane";
 import { PreviewPane } from "@/components/prompt-builder/PreviewPane";
 import { SectionCard } from "@/components/prompt-builder/SectionCard";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import {
   compilePrompt as compilePromptAPI,
   createPromptDraft,
@@ -26,7 +25,7 @@ const EMPTY_METADATA = {
   use_case: "",
 };
 
-const BuilderPage = ({ role }) => {
+const BuilderPage = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [metadata, setMetadata] = useState(EMPTY_METADATA);
@@ -38,7 +37,7 @@ const BuilderPage = ({ role }) => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isReadOnly = role === "viewer";
+  const isReadOnly = currentUser?.role === "viewer";
   const compiledOutput = useMemo(() => compilePromptOutput(sections), [sections]);
   const selectedSections = useMemo(() => sections.filter((section) => section.enabled), [sections]);
 
@@ -208,13 +207,13 @@ const BuilderPage = ({ role }) => {
       };
 
       if (draftId) {
-        const updated = await updatePromptDraft(draftId, payload, role);
+        const updated = await updatePromptDraft(draftId, payload);
         setDraftId(updated.id);
         toast.success("Draft updated successfully.");
         return;
       }
 
-      const created = await createPromptDraft(payload, role);
+      const created = await createPromptDraft(payload);
       setDraftId(created.id);
       const params = new URLSearchParams(location.search);
       params.set("draftId", created.id);
@@ -236,198 +235,174 @@ const BuilderPage = ({ role }) => {
   }
 
   return (
-    <div className="grid h-[calc(100vh-84px)] grid-cols-1 gap-0 lg:grid-cols-12" data-testid="builder-page-container">
-      <section
-        className="pane-scroll lg:col-span-3 overflow-y-auto border-r border-slate-200 bg-slate-50/70 p-5 md:p-6"
-        data-testid="builder-library-pane"
+    <div className="flex h-[calc(100vh-84px)] flex-col" data-testid="builder-page-container">
+      <div
+        className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur-sm md:px-6"
+        data-testid="builder-compact-header"
       >
-        <LibraryPane
-          sections={sections}
-          readOnly={isReadOnly}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          onSectionToggle={handleSectionToggle}
-          onSubsectionToggle={handleSubsectionToggle}
-        />
-      </section>
+        <div className="grid gap-3 lg:grid-cols-[1.6fr_1.2fr_1.2fr_auto]" data-testid="builder-compact-header-grid">
+          <Input
+            value={metadata.title}
+            disabled={isReadOnly}
+            onChange={(event) => handleMetadataChange("title", event.target.value)}
+            placeholder="Prompt title"
+            data-testid="builder-compact-title-input"
+          />
+          <Input
+            value={metadata.customer_name}
+            disabled={isReadOnly}
+            onChange={(event) => handleMetadataChange("customer_name", event.target.value)}
+            placeholder="Customer"
+            data-testid="builder-compact-customer-input"
+          />
+          <Input
+            value={metadata.use_case}
+            disabled={isReadOnly}
+            onChange={(event) => handleMetadataChange("use_case", event.target.value)}
+            placeholder="Use case"
+            data-testid="builder-compact-usecase-input"
+          />
+          <Button
+            type="button"
+            onClick={handleSaveDraft}
+            disabled={saving || isReadOnly}
+            data-testid="builder-save-draft-button"
+          >
+            <Save className="mr-2 h-4 w-4" />
+            {saving ? "Saving..." : "Save Draft"}
+          </Button>
+        </div>
 
-      <section
-        className="pane-scroll lg:col-span-4 overflow-y-auto border-r border-slate-200 bg-white p-5 md:p-6"
-        data-testid="builder-config-pane"
-      >
-        <div className="space-y-6">
-          <Card className="border-slate-200 shadow-sm" data-testid="builder-metadata-card">
-            <CardHeader>
-              <CardTitle className="text-lg font-bold text-slate-900" data-testid="builder-metadata-title">
-                Prompt Context
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label
-                    htmlFor="prompt-title"
-                    className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
-                    data-testid="builder-metadata-title-label"
-                  >
-                    Prompt Title
-                  </label>
-                  <Input
-                    id="prompt-title"
-                    value={metadata.title}
-                    disabled={isReadOnly}
-                    onChange={(event) => handleMetadataChange("title", event.target.value)}
-                    data-testid="builder-metadata-title-input"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label
-                    htmlFor="customer-name"
-                    className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
-                    data-testid="builder-metadata-customer-label"
-                  >
-                    Customer Name
-                  </label>
-                  <Input
-                    id="customer-name"
-                    value={metadata.customer_name}
-                    disabled={isReadOnly}
-                    onChange={(event) => handleMetadataChange("customer_name", event.target.value)}
-                    data-testid="builder-metadata-customer-input"
-                  />
-                </div>
-              </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="builder-compact-header-badges">
+          <Badge className="bg-indigo-100 text-indigo-700" data-testid="builder-role-badge">
+            Role: {currentUser?.role}
+          </Badge>
+          <Badge className="bg-slate-100 text-slate-700" data-testid="builder-draft-id-badge">
+            Draft: {draftId || "New"}
+          </Badge>
+        </div>
+      </div>
 
-              <div className="space-y-2">
-                <label
-                  htmlFor="use-case"
-                  className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
-                  data-testid="builder-metadata-usecase-label"
-                >
-                  Use Case Notes
-                </label>
-                <Textarea
-                  id="use-case"
-                  value={metadata.use_case}
-                  disabled={isReadOnly}
-                  onChange={(event) => handleMetadataChange("use_case", event.target.value)}
-                  className="min-h-24"
-                  data-testid="builder-metadata-usecase-input"
-                />
-              </div>
+      <div className="min-h-0 flex-1" data-testid="builder-resizable-container">
+        <ResizablePanelGroup direction="horizontal" autoSaveId="builder-three-pane-layout" data-testid="builder-resizable-group">
+          <ResizablePanel defaultSize={25} minSize={18} data-testid="builder-library-panel">
+            <section className="pane-scroll h-full overflow-y-auto border-r border-slate-200 bg-slate-50/70 p-5" data-testid="builder-library-pane">
+              <LibraryPane
+                sections={sections}
+                readOnly={isReadOnly}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onSectionToggle={handleSectionToggle}
+                onSubsectionToggle={handleSubsectionToggle}
+              />
+            </section>
+          </ResizablePanel>
 
-              <div className="flex flex-wrap items-center justify-between gap-3" data-testid="builder-metadata-actions">
-                <div className="flex flex-wrap items-center gap-2" data-testid="builder-metadata-status-group">
-                  <Badge className="bg-indigo-100 text-indigo-700" data-testid="builder-role-badge">
-                    Role: {role}
-                  </Badge>
-                  <Badge className="bg-slate-100 text-slate-700" data-testid="builder-draft-id-badge">
-                    Draft: {draftId || "New"}
+          <ResizableHandle withHandle data-testid="builder-library-config-resize-handle" />
+
+          <ResizablePanel defaultSize={35} minSize={24} data-testid="builder-config-panel">
+            <section className="pane-scroll h-full overflow-y-auto border-r border-slate-200 bg-white p-5" data-testid="builder-config-pane">
+              <div className="space-y-6">
+                <div className="flex items-center justify-between" data-testid="builder-configuration-header">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500" data-testid="builder-configuration-eyebrow">
+                      Prompt Configuration
+                    </p>
+                    <h2 className="mt-1 text-2xl font-bold text-slate-900" data-testid="builder-configuration-title">
+                      Configure Selected Sections
+                    </h2>
+                  </div>
+                  <Badge className="bg-indigo-100 text-indigo-700" data-testid="builder-selected-sections-badge">
+                    {selectedSections.length} selected
                   </Badge>
                 </div>
 
-                <Button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  disabled={saving || isReadOnly}
-                  className="h-10 rounded-md bg-indigo-600 px-4 text-white transition-colors duration-200 hover:bg-indigo-500"
-                  data-testid="builder-save-draft-button"
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  {saving ? "Saving..." : "Save Draft"}
-                </Button>
+                {selectedSections.length === 0 && (
+                  <div
+                    className="noise-overlay rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center"
+                    data-testid="builder-configuration-empty-state"
+                  >
+                    <p className="text-sm font-semibold text-slate-700">No sections selected yet.</p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Use the left library pane to pick sections and subsections for this prompt.
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-6" data-testid="builder-configured-section-stack">
+                  {selectedSections.map((section, index) => (
+                    <motion.div
+                      key={section.id}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.25, delay: index * 0.03 }}
+                      data-testid={`builder-configured-section-motion-${section.id}`}
+                    >
+                      <SectionCard
+                        section={section}
+                        readOnly={isReadOnly}
+                        activeVariable={activeVariable}
+                        onActiveVariableChange={setActiveVariable}
+                        onSectionUpdate={(updatedSection) => updateSectionById(section.id, updatedSection)}
+                        showSectionToggle={false}
+                        showSubsectionToggle={false}
+                        onlyShowEnabledSubsections
+                      />
+                    </motion.div>
+                  ))}
+                </div>
               </div>
-            </CardContent>
-          </Card>
+            </section>
+          </ResizablePanel>
 
-          <div className="flex items-center justify-between" data-testid="builder-configuration-header">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500" data-testid="builder-configuration-eyebrow">
-                Prompt Configuration
-              </p>
-              <h2 className="mt-1 text-2xl font-bold text-slate-900" data-testid="builder-configuration-title">
-                Configure Selected Sections
-              </h2>
-            </div>
-            <Badge className="bg-indigo-100 text-indigo-700" data-testid="builder-selected-sections-badge">
-              {selectedSections.length} selected
-            </Badge>
-          </div>
+          <ResizableHandle withHandle data-testid="builder-config-preview-resize-handle" />
 
-          {selectedSections.length === 0 && (
-            <div
-              className="noise-overlay rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center"
-              data-testid="builder-configuration-empty-state"
-            >
-              <p className="text-sm font-semibold text-slate-700">No sections selected yet.</p>
-              <p className="mt-2 text-sm text-slate-600">
-                Use the left library pane to pick sections and subsections for this prompt.
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-6" data-testid="builder-configured-section-stack">
-            {selectedSections.map((section, index) => (
-              <motion.div
-                key={section.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: index * 0.03 }}
-                data-testid={`builder-configured-section-motion-${section.id}`}
+          <ResizablePanel defaultSize={40} minSize={25} data-testid="builder-preview-panel">
+            <section className="pane-scroll h-full overflow-y-auto bg-slate-50/30 p-5" data-testid="builder-preview-pane">
+              <div
+                className="sticky top-0 z-10 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur-sm"
+                data-testid="preview-export-toolbar"
               >
-                <SectionCard
-                  section={section}
-                  readOnly={isReadOnly}
-                  activeVariable={activeVariable}
-                  onActiveVariableChange={setActiveVariable}
-                  onSectionUpdate={(updatedSection) => updateSectionById(section.id, updatedSection)}
-                  showSectionToggle={false}
-                  showSubsectionToggle={false}
-                  onlyShowEnabledSubsections
-                />
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500" data-testid="preview-export-eyebrow">
+                    Output Actions
+                  </p>
+                  <p className="text-sm font-semibold text-slate-800" data-testid="preview-export-title">
+                    Export and share compiled prompt instantly
+                  </p>
+                </div>
 
-      <section
-        className="pane-scroll lg:col-span-5 overflow-y-auto bg-slate-50/30 p-5 md:p-6"
-        data-testid="builder-preview-pane"
-      >
-        <div className="sticky top-0 z-10 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur-sm" data-testid="preview-export-toolbar">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500" data-testid="preview-export-eyebrow">
-              Output Actions
-            </p>
-            <p className="text-sm font-semibold text-slate-800" data-testid="preview-export-title">
-              Export and share compiled prompt instantly
-            </p>
-          </div>
+                <div className="flex flex-wrap items-center gap-2" data-testid="preview-export-actions-group">
+                  <Button type="button" variant="outline" onClick={handleCopyPrompt} data-testid="preview-copy-prompt-button">
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy Prompt
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCopySnippets}
+                    data-testid="preview-copy-snippets-button"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy Snippets
+                  </Button>
+                  <Button type="button" onClick={handleDownloadJson} data-testid="preview-download-json-button">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download JSON
+                  </Button>
+                </div>
+              </div>
 
-          <div className="flex flex-wrap items-center gap-2" data-testid="preview-export-actions-group">
-            <Button type="button" variant="outline" onClick={handleCopyPrompt} data-testid="preview-copy-prompt-button">
-              <Copy className="mr-2 h-4 w-4" />
-              Copy Prompt
-            </Button>
-            <Button type="button" variant="outline" onClick={handleCopySnippets} data-testid="preview-copy-snippets-button">
-              <Copy className="mr-2 h-4 w-4" />
-              Copy Snippets
-            </Button>
-            <Button type="button" onClick={handleDownloadJson} data-testid="preview-download-json-button">
-              <Download className="mr-2 h-4 w-4" />
-              Download JSON
-            </Button>
-          </div>
-        </div>
-
-        <PreviewPane
-          metadata={metadata}
-          sections={sections}
-          compiledPrompt={compiledOutput.compiledPrompt}
-          activeVariable={activeVariable}
-        />
-      </section>
+              <PreviewPane
+                metadata={metadata}
+                sections={sections}
+                compiledPrompt={compiledOutput.compiledPrompt}
+                activeVariable={activeVariable}
+              />
+            </section>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
     </div>
   );
 };
