@@ -1,89 +1,567 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+import os
+import re
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Literal, Optional
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI, Header, HTTPException
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware.cors import CORSMiddleware
 
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ["DB_NAME"]]
 
-# Create the main app without a prefix
-app = FastAPI()
-
-# Create a router with the /api prefix
+app = FastAPI(title="ReachAll Prompt Builder API")
 api_router = APIRouter(prefix="/api")
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+class VariableDefinition(BaseModel):
+    key: str
+    label: str
+    placeholder: str = ""
+    required: bool = True
+    default_value: str = ""
+
+
+class TemplateSubSection(BaseModel):
+    id: str
+    title: str
+    description: str = ""
+    template_text: str
+    variables: List[VariableDefinition] = Field(default_factory=list)
+    enabled_by_default: bool = True
+
+
+class PromptSectionTemplate(BaseModel):
+    id: str
+    name: str
+    description: str = ""
+    template_text: str
+    variables: List[VariableDefinition] = Field(default_factory=list)
+    subsections: List[TemplateSubSection] = Field(default_factory=list)
+    enabled_by_default: bool = True
+
+
+class TemplateSectionPayload(BaseModel):
+    name: str
+    description: str = ""
+    template_text: str
+    variables: List[VariableDefinition] = Field(default_factory=list)
+    subsections: List[TemplateSubSection] = Field(default_factory=list)
+    enabled_by_default: bool = True
+
+
+class PromptSubSectionState(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    title: str
+    enabled: bool = True
+    raw_text: str
+    variable_values: Dict[str, str] = Field(default_factory=dict)
+
+
+class PromptSectionState(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    name: str
+    enabled: bool = True
+    raw_text: str
+    variable_values: Dict[str, str] = Field(default_factory=dict)
+    subsections: List[PromptSubSectionState] = Field(default_factory=list)
+
+
+class PromptDraftPayload(BaseModel):
+    title: str
+    customer_name: str = ""
+    use_case: str = ""
+    sections: List[PromptSectionState]
+    compiled_prompt: str = ""
+
+
+class PromptDraft(PromptDraftPayload):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_by_role: Literal["admin", "editor", "viewer"] = "editor"
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
+class CompilePromptRequest(BaseModel):
+    sections: List[PromptSectionState]
+
+
+class CompilePromptResponse(BaseModel):
+    compiled_prompt: str
+    section_snippets: Dict[str, str]
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class RolesResponse(BaseModel):
+    roles: Dict[str, Dict[str, bool]]
+
+
+ROLE_PERMISSIONS = {
+    "admin": {
+        "can_manage_templates": True,
+        "can_create_prompts": True,
+        "can_update_prompts": True,
+        "can_delete_prompts": True,
+    },
+    "editor": {
+        "can_manage_templates": False,
+        "can_create_prompts": True,
+        "can_update_prompts": True,
+        "can_delete_prompts": True,
+    },
+    "viewer": {
+        "can_manage_templates": False,
+        "can_create_prompts": False,
+        "can_update_prompts": False,
+        "can_delete_prompts": False,
+    },
+}
+
+
+def normalize_role(role_value: Optional[str]) -> str:
+    role = (role_value or "viewer").strip().lower()
+    return role if role in ROLE_PERMISSIONS else "viewer"
+
+
+def enforce_role(user_role: str, allowed_roles: List[str]) -> None:
+    if user_role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="You do not have permission for this action.")
+
+
+def get_default_templates() -> List[PromptSectionTemplate]:
+    return [
+        PromptSectionTemplate(
+            id="agent_persona",
+            name="Agent Persona",
+            description="Defines who the agent is and why it is calling.",
+            template_text=(
+                "# Agent Persona\n"
+                "## Name = {agent_name}\n"
+                "## Role = {agent_role}\n"
+                "## Gender = {agent_gender_style}\n"
+                "## Objective = {agent_objective}"
+            ),
+            variables=[
+                VariableDefinition(key="agent_name", label="Agent Name", placeholder="Riya", required=True),
+                VariableDefinition(
+                    key="agent_role",
+                    label="Agent Role",
+                    placeholder="AI HR Executive for 3eco",
+                    required=True,
+                ),
+                VariableDefinition(
+                    key="agent_gender_style",
+                    label="Voice Style",
+                    placeholder="Female. You talk like female.",
+                    required=True,
+                ),
+                VariableDefinition(
+                    key="agent_objective",
+                    label="Objective",
+                    placeholder="Notify supervisors about missed checklist.",
+                    required=True,
+                ),
+            ],
+            subsections=[],
+        ),
+        PromptSectionTemplate(
+            id="language_guidelines",
+            name="Language Detection & Consistency",
+            description="Keeps language behavior stable through the full call.",
+            template_text=(
+                "## Language Detection & Consistency\n"
+                "**CRITICAL: Maintain language consistency throughout the conversation.**\n"
+                "Default language: {default_language}."
+            ),
+            variables=[
+                VariableDefinition(
+                    key="default_language",
+                    label="Default Language",
+                    placeholder="Mumbai Hindi/Hinglish",
+                    required=True,
+                    default_value="Mumbai Hindi/Hinglish",
+                ),
+            ],
+            subsections=[
+                TemplateSubSection(
+                    id="detection_logic",
+                    title="Detection Logic",
+                    description="Rules to classify sentence language.",
+                    template_text=(
+                        "### Detection Logic\n"
+                        "Detect language using sentence structure, verbs and auxiliaries.\n"
+                        "Ignore brand names: {ignore_brands}\n"
+                        "Ignore app terms: {ignore_app_terms}\n"
+                        "Ignore locations: {ignore_locations}"
+                    ),
+                    variables=[
+                        VariableDefinition(
+                            key="ignore_brands",
+                            label="Brand Names to Ignore",
+                            placeholder="Grab, JioMart, Jio",
+                            required=True,
+                        ),
+                        VariableDefinition(
+                            key="ignore_app_terms",
+                            label="App Terms to Ignore",
+                            placeholder="App, Play Store, Link, Download, Android",
+                            required=True,
+                        ),
+                        VariableDefinition(
+                            key="ignore_locations",
+                            label="Locations to Ignore",
+                            placeholder="Mumbai, Thane, Navi Mumbai",
+                            required=True,
+                        ),
+                    ],
+                ),
+                TemplateSubSection(
+                    id="switching_rules",
+                    title="Switching Rules",
+                    description="When to switch language and when to hold.",
+                    template_text=(
+                        "### Switching Rules\n"
+                        "If mixed sentence has Hindi grammar, stay in {default_language}.\n"
+                        "Switch to English only when user speaks full English sentence structures.\n"
+                        "Human fillers style: {human_fillers_style}"
+                    ),
+                    variables=[
+                        VariableDefinition(
+                            key="human_fillers_style",
+                            label="Human Fillers Style",
+                            placeholder="Use fillers like 'Yeah, um... so' naturally.",
+                            required=False,
+                        ),
+                    ],
+                ),
+            ],
+        ),
+        PromptSectionTemplate(
+            id="call_flow",
+            name="Call Flow",
+            description="Step-by-step conversation sequence.",
+            template_text=(
+                "## Call Flow Summary\n"
+                "Flow objective: {flow_objective}\n"
+                "Success criteria: {success_criteria}"
+            ),
+            variables=[
+                VariableDefinition(
+                    key="flow_objective",
+                    label="Flow Objective",
+                    placeholder="Complete checklist reminder in one call.",
+                    required=True,
+                ),
+                VariableDefinition(
+                    key="success_criteria",
+                    label="Success Criteria",
+                    placeholder="Supervisor confirms checklist completion timeline.",
+                    required=True,
+                ),
+            ],
+            subsections=[
+                TemplateSubSection(
+                    id="opening",
+                    title="Opening",
+                    description="How the call starts.",
+                    template_text="### Step 1 - Opening\nGreeting script: {opening_script}",
+                    variables=[
+                        VariableDefinition(
+                            key="opening_script",
+                            label="Opening Script",
+                            placeholder="Hi {customer_name}, this is {agent_name} from ReachAll.",
+                            required=True,
+                        )
+                    ],
+                ),
+                TemplateSubSection(
+                    id="resolution",
+                    title="Resolution & CTA",
+                    description="Final action and closure.",
+                    template_text="### Step 2 - Resolution\nCall to action: {call_to_action}",
+                    variables=[
+                        VariableDefinition(
+                            key="call_to_action",
+                            label="Call to Action",
+                            placeholder="Please complete checklist before 6 PM to avoid penalty.",
+                            required=True,
+                        )
+                    ],
+                ),
+            ],
+        ),
+        PromptSectionTemplate(
+            id="guardrails",
+            name="Guardrails",
+            description="Hard boundaries and compliance behavior.",
+            template_text=(
+                "## Guardrails\n"
+                "- Never promise anything outside approved policy.\n"
+                "- Sensitive data handling: {sensitive_data_rule}\n"
+                "- Escalation condition: {escalation_rule}"
+            ),
+            variables=[
+                VariableDefinition(
+                    key="sensitive_data_rule",
+                    label="Sensitive Data Rule",
+                    placeholder="Do not ask for full government ID numbers.",
+                    required=True,
+                ),
+                VariableDefinition(
+                    key="escalation_rule",
+                    label="Escalation Rule",
+                    placeholder="Escalate when user asks for policy exception.",
+                    required=True,
+                ),
+            ],
+            subsections=[],
+        ),
+    ]
+
+
+def extract_placeholders(template_text: str) -> List[str]:
+    keys = re.findall(r"\{\s*([a-zA-Z0-9_.-]+)\s*\}", template_text)
+    seen = set()
+    ordered = []
+    for key in keys:
+        if key not in seen:
+            seen.add(key)
+            ordered.append(key)
+    return ordered
+
+
+def fill_template(template_text: str, variable_values: Dict[str, str]) -> str:
+    def replace(match: re.Match) -> str:
+        key = match.group(1).strip()
+        value = variable_values.get(key, "")
+        return value.strip() if value and value.strip() else f"{{{key}}}"
+
+    return re.sub(r"\{\s*([a-zA-Z0-9_.-]+)\s*\}", replace, template_text)
+
+
+def compile_sections(sections: List[PromptSectionState]) -> CompilePromptResponse:
+    parts: List[str] = []
+    snippets: Dict[str, str] = {}
+
+    for section in sections:
+        if not section.enabled:
+            continue
+
+        section_lines: List[str] = []
+        main_text = fill_template(section.raw_text, section.variable_values).strip()
+        if main_text:
+            section_lines.append(main_text)
+
+        for subsection in section.subsections:
+            if not subsection.enabled:
+                continue
+            subsection_text = fill_template(subsection.raw_text, subsection.variable_values).strip()
+            if subsection_text:
+                section_lines.append(subsection_text)
+
+        if section_lines:
+            section_output = "\n\n".join(section_lines).strip()
+            snippets[section.id] = section_output
+            parts.append(section_output)
+
+    return CompilePromptResponse(compiled_prompt="\n\n".join(parts).strip(), section_snippets=snippets)
+
+
 @api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+async def root() -> MessageResponse:
+    return MessageResponse(message="ReachAll Prompt Builder API")
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+@api_router.get("/roles", response_model=RolesResponse)
+async def get_roles_matrix() -> RolesResponse:
+    return RolesResponse(roles=ROLE_PERMISSIONS)
 
-# Include the router in the main app
+
+@api_router.get("/templates", response_model=List[PromptSectionTemplate])
+async def get_templates() -> List[PromptSectionTemplate]:
+    template_docs = await db.template_sections.find({}, {"_id": 0}).to_list(100)
+
+    if not template_docs:
+        defaults = get_default_templates()
+        await db.template_sections.insert_many([template.model_dump() for template in defaults])
+        return defaults
+
+    return [PromptSectionTemplate(**doc) for doc in template_docs]
+
+
+@api_router.post("/templates", response_model=PromptSectionTemplate)
+async def create_template(
+    payload: TemplateSectionPayload,
+    x_user_role: Optional[str] = Header(default="viewer"),
+) -> PromptSectionTemplate:
+    user_role = normalize_role(x_user_role)
+    enforce_role(user_role, ["admin"])
+
+    template = PromptSectionTemplate(id=str(uuid.uuid4()), **payload.model_dump())
+    await db.template_sections.insert_one(template.model_dump())
+    return template
+
+
+@api_router.put("/templates/{section_id}", response_model=PromptSectionTemplate)
+async def update_template(
+    section_id: str,
+    payload: TemplateSectionPayload,
+    x_user_role: Optional[str] = Header(default="viewer"),
+) -> PromptSectionTemplate:
+    user_role = normalize_role(x_user_role)
+    enforce_role(user_role, ["admin"])
+
+    update_doc = payload.model_dump()
+    update_doc["id"] = section_id
+
+    result = await db.template_sections.update_one({"id": section_id}, {"$set": update_doc})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template section not found.")
+
+    template_doc = await db.template_sections.find_one({"id": section_id}, {"_id": 0})
+    if not template_doc:
+        raise HTTPException(status_code=404, detail="Template section not found.")
+
+    return PromptSectionTemplate(**template_doc)
+
+
+@api_router.get("/prompts", response_model=List[PromptDraft])
+async def list_prompt_drafts() -> List[PromptDraft]:
+    drafts = await db.prompt_drafts.find({}, {"_id": 0}).sort("updated_at", -1).to_list(300)
+    return [PromptDraft(**draft) for draft in drafts]
+
+
+@api_router.get("/prompts/{draft_id}", response_model=PromptDraft)
+async def get_prompt_draft(draft_id: str) -> PromptDraft:
+    draft_doc = await db.prompt_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not draft_doc:
+        raise HTTPException(status_code=404, detail="Prompt draft not found.")
+    return PromptDraft(**draft_doc)
+
+
+@api_router.post("/prompts", response_model=PromptDraft)
+async def create_prompt_draft(
+    payload: PromptDraftPayload,
+    x_user_role: Optional[str] = Header(default="viewer"),
+) -> PromptDraft:
+    user_role = normalize_role(x_user_role)
+    enforce_role(user_role, ["admin", "editor"])
+
+    compile_result = compile_sections(payload.sections)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    draft_data = payload.model_dump()
+    draft_data["compiled_prompt"] = payload.compiled_prompt or compile_result.compiled_prompt
+    draft_data["created_at"] = now_iso
+    draft_data["updated_at"] = now_iso
+    draft_data["updated_by_role"] = user_role
+
+    prompt_draft = PromptDraft(**draft_data)
+
+    await db.prompt_drafts.insert_one(prompt_draft.model_dump())
+    return prompt_draft
+
+
+@api_router.put("/prompts/{draft_id}", response_model=PromptDraft)
+async def update_prompt_draft(
+    draft_id: str,
+    payload: PromptDraftPayload,
+    x_user_role: Optional[str] = Header(default="viewer"),
+) -> PromptDraft:
+    user_role = normalize_role(x_user_role)
+    enforce_role(user_role, ["admin", "editor"])
+
+    compile_result = compile_sections(payload.sections)
+    updated_doc = payload.model_dump()
+    updated_doc["compiled_prompt"] = payload.compiled_prompt or compile_result.compiled_prompt
+    updated_doc["updated_at"] = datetime.now(timezone.utc).isoformat()
+    updated_doc["updated_by_role"] = user_role
+
+    result = await db.prompt_drafts.update_one({"id": draft_id}, {"$set": updated_doc})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Prompt draft not found.")
+
+    draft_doc = await db.prompt_drafts.find_one({"id": draft_id}, {"_id": 0})
+    if not draft_doc:
+        raise HTTPException(status_code=404, detail="Prompt draft not found.")
+
+    return PromptDraft(**draft_doc)
+
+
+@api_router.delete("/prompts/{draft_id}", response_model=MessageResponse)
+async def delete_prompt_draft(
+    draft_id: str,
+    x_user_role: Optional[str] = Header(default="viewer"),
+) -> MessageResponse:
+    user_role = normalize_role(x_user_role)
+    enforce_role(user_role, ["admin", "editor"])
+
+    result = await db.prompt_drafts.delete_one({"id": draft_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Prompt draft not found.")
+
+    return MessageResponse(message="Prompt draft deleted successfully.")
+
+
+@api_router.post("/prompts/compile", response_model=CompilePromptResponse)
+async def compile_prompt(payload: CompilePromptRequest) -> CompilePromptResponse:
+    return compile_sections(payload.sections)
+
+
+@api_router.get("/templates/{section_id}/variables", response_model=List[str])
+async def get_template_variables(section_id: str) -> List[str]:
+    template_doc = await db.template_sections.find_one({"id": section_id}, {"_id": 0})
+    if not template_doc:
+        raise HTTPException(status_code=404, detail="Template section not found.")
+
+    keys = extract_placeholders(template_doc.get("template_text", ""))
+    for subsection in template_doc.get("subsections", []):
+        keys.extend(extract_placeholders(subsection.get("template_text", "")))
+
+    seen = set()
+    unique_keys = []
+    for key in keys:
+        if key not in seen:
+            seen.add(key)
+            unique_keys.append(key)
+
+    return unique_keys
+
+
 app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
+
 @app.on_event("shutdown")
-async def shutdown_db_client():
+async def shutdown_db_client() -> None:
     client.close()
