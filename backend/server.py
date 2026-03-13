@@ -620,12 +620,14 @@ async def update_user_role(
 
 
 @api_router.get("/roles", response_model=RolesResponse)
-async def get_roles_matrix() -> RolesResponse:
+async def get_roles_matrix(authorization: Optional[str] = Header(default=None)) -> RolesResponse:
+    _ = await get_current_user_from_authorization(authorization)
     return RolesResponse(roles=ROLE_PERMISSIONS)
 
 
 @api_router.get("/templates", response_model=List[PromptSectionTemplate])
-async def get_templates() -> List[PromptSectionTemplate]:
+async def get_templates(authorization: Optional[str] = Header(default=None)) -> List[PromptSectionTemplate]:
+    _ = await get_current_user_from_authorization(authorization)
     template_docs = await db.template_sections.find({}, {"_id": 0}).to_list(100)
 
     if not template_docs:
@@ -639,10 +641,10 @@ async def get_templates() -> List[PromptSectionTemplate]:
 @api_router.post("/templates", response_model=PromptSectionTemplate)
 async def create_template(
     payload: TemplateSectionPayload,
-    x_user_role: Optional[str] = Header(default="viewer"),
+    authorization: Optional[str] = Header(default=None),
 ) -> PromptSectionTemplate:
-    user_role = normalize_role(x_user_role)
-    enforce_role(user_role, ["admin"])
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin"])
 
     template = PromptSectionTemplate(id=str(uuid.uuid4()), **payload.model_dump())
     await db.template_sections.insert_one(template.model_dump())
@@ -653,10 +655,10 @@ async def create_template(
 async def update_template(
     section_id: str,
     payload: TemplateSectionPayload,
-    x_user_role: Optional[str] = Header(default="viewer"),
+    authorization: Optional[str] = Header(default=None),
 ) -> PromptSectionTemplate:
-    user_role = normalize_role(x_user_role)
-    enforce_role(user_role, ["admin"])
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin"])
 
     update_doc = payload.model_dump()
     update_doc["id"] = section_id
@@ -673,13 +675,15 @@ async def update_template(
 
 
 @api_router.get("/prompts", response_model=List[PromptDraft])
-async def list_prompt_drafts() -> List[PromptDraft]:
+async def list_prompt_drafts(authorization: Optional[str] = Header(default=None)) -> List[PromptDraft]:
+    _ = await get_current_user_from_authorization(authorization)
     drafts = await db.prompt_drafts.find({}, {"_id": 0}).sort("updated_at", -1).to_list(300)
     return [PromptDraft(**draft) for draft in drafts]
 
 
 @api_router.get("/prompts/{draft_id}", response_model=PromptDraft)
-async def get_prompt_draft(draft_id: str) -> PromptDraft:
+async def get_prompt_draft(draft_id: str, authorization: Optional[str] = Header(default=None)) -> PromptDraft:
+    _ = await get_current_user_from_authorization(authorization)
     draft_doc = await db.prompt_drafts.find_one({"id": draft_id}, {"_id": 0})
     if not draft_doc:
         raise HTTPException(status_code=404, detail="Prompt draft not found.")
@@ -689,11 +693,10 @@ async def get_prompt_draft(draft_id: str) -> PromptDraft:
 @api_router.post("/prompts", response_model=PromptDraft)
 async def create_prompt_draft(
     payload: PromptDraftPayload,
-    x_user_role: Optional[str] = Header(default="viewer"),
-    x_user_name: Optional[str] = Header(default=""),
+    authorization: Optional[str] = Header(default=None),
 ) -> PromptDraft:
-    user_role = normalize_role(x_user_role)
-    enforce_role(user_role, ["admin", "editor"])
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin", "editor"])
 
     compile_result = compile_sections(payload.sections)
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -702,9 +705,9 @@ async def create_prompt_draft(
     draft_data["compiled_prompt"] = payload.compiled_prompt or compile_result.compiled_prompt
     draft_data["created_at"] = now_iso
     draft_data["updated_at"] = now_iso
-    draft_data["updated_by_role"] = user_role
-    draft_data["created_by_username"] = normalize_username(x_user_name or "unknown")
-    draft_data["updated_by_username"] = normalize_username(x_user_name or "unknown")
+    draft_data["updated_by_role"] = current_user.role
+    draft_data["created_by_username"] = current_user.username
+    draft_data["updated_by_username"] = current_user.username
 
     prompt_draft = PromptDraft(**draft_data)
 
@@ -716,18 +719,17 @@ async def create_prompt_draft(
 async def update_prompt_draft(
     draft_id: str,
     payload: PromptDraftPayload,
-    x_user_role: Optional[str] = Header(default="viewer"),
-    x_user_name: Optional[str] = Header(default=""),
+    authorization: Optional[str] = Header(default=None),
 ) -> PromptDraft:
-    user_role = normalize_role(x_user_role)
-    enforce_role(user_role, ["admin", "editor"])
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin", "editor"])
 
     compile_result = compile_sections(payload.sections)
     updated_doc = payload.model_dump()
     updated_doc["compiled_prompt"] = payload.compiled_prompt or compile_result.compiled_prompt
     updated_doc["updated_at"] = datetime.now(timezone.utc).isoformat()
-    updated_doc["updated_by_role"] = user_role
-    updated_doc["updated_by_username"] = normalize_username(x_user_name or "unknown")
+    updated_doc["updated_by_role"] = current_user.role
+    updated_doc["updated_by_username"] = current_user.username
 
     result = await db.prompt_drafts.update_one({"id": draft_id}, {"$set": updated_doc})
     if result.matched_count == 0:
@@ -743,10 +745,10 @@ async def update_prompt_draft(
 @api_router.delete("/prompts/{draft_id}", response_model=MessageResponse)
 async def delete_prompt_draft(
     draft_id: str,
-    x_user_role: Optional[str] = Header(default="viewer"),
+    authorization: Optional[str] = Header(default=None),
 ) -> MessageResponse:
-    user_role = normalize_role(x_user_role)
-    enforce_role(user_role, ["admin", "editor"])
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin", "editor"])
 
     result = await db.prompt_drafts.delete_one({"id": draft_id})
     if result.deleted_count == 0:
@@ -756,12 +758,17 @@ async def delete_prompt_draft(
 
 
 @api_router.post("/prompts/compile", response_model=CompilePromptResponse)
-async def compile_prompt(payload: CompilePromptRequest) -> CompilePromptResponse:
+async def compile_prompt(
+    payload: CompilePromptRequest,
+    authorization: Optional[str] = Header(default=None),
+) -> CompilePromptResponse:
+    _ = await get_current_user_from_authorization(authorization)
     return compile_sections(payload.sections)
 
 
 @api_router.get("/templates/{section_id}/variables", response_model=List[str])
-async def get_template_variables(section_id: str) -> List[str]:
+async def get_template_variables(section_id: str, authorization: Optional[str] = Header(default=None)) -> List[str]:
+    _ = await get_current_user_from_authorization(authorization)
     template_doc = await db.template_sections.find_one({"id": section_id}, {"_id": 0})
     if not template_doc:
         raise HTTPException(status_code=404, detail="Template section not found.")
