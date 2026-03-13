@@ -42,6 +42,14 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Implemented exports: copy prompt, copy snippets (JSON), and JSON file download
 - Implemented template management view with admin-only editing controls
 
+### 2026-03-13 (Flow + Access Upgrade)
+- Added **JWT login flow** with session persistence and `auth/me` validation
+- Added post-login **Activity page** as step-1 landing (recent user activity + Start Building Prompt CTA)
+- Reworked prompt-level metadata input into a **compact top header bar** (removed middle-pane metadata card)
+- Added **resizable pane widths** with draggable handles and saved pane layout preferences
+- Added **Team Users & Roles** page where admin can create internal users and assign roles
+- Hardened backend authorization so prompt/template writes derive role and username from validated JWT (no client-header trust)
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away

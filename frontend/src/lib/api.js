@@ -20,18 +20,9 @@ const getStoredUser = () => {
 
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-  const user = getStoredUser();
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  if (user?.role) {
-    config.headers["x-user-role"] = user.role;
-  }
-
-  if (user?.username) {
-    config.headers["x-user-name"] = user.username;
   }
 
   return config;
