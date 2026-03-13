@@ -20,9 +20,16 @@ export const SectionCard = ({
   activeVariable,
   onActiveVariableChange,
   onSectionUpdate,
+  showSectionToggle = true,
+  showSubsectionToggle = true,
+  onlyShowEnabledSubsections = false,
 }) => {
   const [showRawEditor, setShowRawEditor] = useState(false);
   const [subsectionRawState, setSubsectionRawState] = useState({});
+
+  const visibleSubsections = onlyShowEnabledSubsections
+    ? (section.subsections || []).filter((subsection) => subsection.enabled)
+    : section.subsections || [];
 
   const sectionVariableKeys = useMemo(
     () => mergeVariableKeys(section.raw_text, section.variable_values),
@@ -80,13 +87,16 @@ export const SectionCard = ({
             >
               {section.enabled ? "Enabled" : "Disabled"}
             </Badge>
-            <Switch
-              checked={section.enabled}
-              disabled={readOnly}
-              onCheckedChange={(value) => updateSectionField("enabled", value)}
-              aria-label={`Toggle ${section.name}`}
-              data-testid={`section-toggle-${section.id}`}
-            />
+
+            {showSectionToggle && (
+              <Switch
+                checked={section.enabled}
+                disabled={readOnly}
+                onCheckedChange={(value) => updateSectionField("enabled", value)}
+                aria-label={`Toggle ${section.name}`}
+                data-testid={`section-toggle-${section.id}`}
+              />
+            )}
           </div>
         </div>
       </CardHeader>
@@ -173,13 +183,13 @@ export const SectionCard = ({
             </motion.div>
           )}
 
-          {(section.subsections || []).length > 0 && (
+          {visibleSubsections.length > 0 && (
             <div className="space-y-3" data-testid={`section-subsection-container-${section.id}`}>
               <p className="text-sm font-semibold text-slate-800" data-testid={`section-subsection-title-${section.id}`}>
                 Subsections
               </p>
 
-              {section.subsections.map((subsection) => {
+              {visibleSubsections.map((subsection) => {
                 const subsectionVariableKeys = mergeVariableKeys(subsection.raw_text, subsection.variable_values);
                 const rawVisible = subsectionRawState[subsection.id] || false;
 
@@ -217,18 +227,21 @@ export const SectionCard = ({
                         >
                           {rawVisible ? "Hide Raw" : "Edit Raw"}
                         </Button>
-                        <Switch
-                          checked={subsection.enabled}
-                          disabled={readOnly}
-                          onCheckedChange={(value) =>
-                            updateSubsection(subsection.id, (current) => ({
-                              ...current,
-                              enabled: value,
-                            }))
-                          }
-                          aria-label={`Toggle ${subsection.title}`}
-                          data-testid={`subsection-toggle-${section.id}-${subsection.id}`}
-                        />
+
+                        {showSubsectionToggle && (
+                          <Switch
+                            checked={subsection.enabled}
+                            disabled={readOnly}
+                            onCheckedChange={(value) =>
+                              updateSubsection(subsection.id, (current) => ({
+                                ...current,
+                                enabled: value,
+                              }))
+                            }
+                            aria-label={`Toggle ${subsection.title}`}
+                            data-testid={`subsection-toggle-${section.id}-${subsection.id}`}
+                          />
+                        )}
                       </div>
                     </div>
 

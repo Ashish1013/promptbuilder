@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { LibraryPane } from "@/components/prompt-builder/LibraryPane";
 import { PreviewPane } from "@/components/prompt-builder/PreviewPane";
 import { SectionCard } from "@/components/prompt-builder/SectionCard";
 import {
@@ -32,12 +33,14 @@ const BuilderPage = ({ role }) => {
   const [sections, setSections] = useState([]);
   const [draftId, setDraftId] = useState("");
   const [activeVariable, setActiveVariable] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const location = useLocation();
   const navigate = useNavigate();
 
   const isReadOnly = role === "viewer";
   const compiledOutput = useMemo(() => compilePromptOutput(sections), [sections]);
+  const selectedSections = useMemo(() => sections.filter((section) => section.enabled), [sections]);
 
   const loadBuilderState = useCallback(async () => {
     setLoading(true);
@@ -76,6 +79,41 @@ const BuilderPage = ({ role }) => {
 
   const updateSectionById = (sectionId, updatedSection) => {
     setSections((prevSections) => prevSections.map((section) => (section.id === sectionId ? updatedSection : section)));
+  };
+
+  const handleSectionToggle = (sectionId, enabled) => {
+    setSections((prevSections) =>
+      prevSections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              enabled,
+            }
+          : section,
+      ),
+    );
+  };
+
+  const handleSubsectionToggle = (sectionId, subsectionId, enabled) => {
+    setSections((prevSections) =>
+      prevSections.map((section) => {
+        if (section.id !== sectionId) {
+          return section;
+        }
+
+        return {
+          ...section,
+          subsections: section.subsections.map((subsection) =>
+            subsection.id === subsectionId
+              ? {
+                  ...subsection,
+                  enabled,
+                }
+              : subsection,
+          ),
+        };
+      }),
+    );
   };
 
   const handleMetadataChange = (field, value) => {
@@ -200,10 +238,24 @@ const BuilderPage = ({ role }) => {
   return (
     <div className="grid h-[calc(100vh-84px)] grid-cols-1 gap-0 lg:grid-cols-12" data-testid="builder-page-container">
       <section
-        className="pane-scroll lg:col-span-7 xl:col-span-6 overflow-y-auto border-r border-slate-200 bg-slate-50/60 p-6 md:p-8 lg:p-10"
-        data-testid="builder-left-pane"
+        className="pane-scroll lg:col-span-3 overflow-y-auto border-r border-slate-200 bg-slate-50/70 p-5 md:p-6"
+        data-testid="builder-library-pane"
       >
-        <div className="space-y-8">
+        <LibraryPane
+          sections={sections}
+          readOnly={isReadOnly}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onSectionToggle={handleSectionToggle}
+          onSubsectionToggle={handleSubsectionToggle}
+        />
+      </section>
+
+      <section
+        className="pane-scroll lg:col-span-4 overflow-y-auto border-r border-slate-200 bg-white p-5 md:p-6"
+        data-testid="builder-config-pane"
+      >
+        <div className="space-y-6">
           <Card className="border-slate-200 shadow-sm" data-testid="builder-metadata-card">
             <CardHeader>
               <CardTitle className="text-lg font-bold text-slate-900" data-testid="builder-metadata-title">
@@ -288,28 +340,40 @@ const BuilderPage = ({ role }) => {
             </CardContent>
           </Card>
 
-          <div className="flex items-center justify-between" data-testid="builder-section-header">
+          <div className="flex items-center justify-between" data-testid="builder-configuration-header">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500" data-testid="builder-section-eyebrow">
-                Global Template Sections
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500" data-testid="builder-configuration-eyebrow">
+                Prompt Configuration
               </p>
-              <h2 className="mt-1 text-2xl font-bold text-slate-900" data-testid="builder-section-title">
-                Build Your Prompt Composition
+              <h2 className="mt-1 text-2xl font-bold text-slate-900" data-testid="builder-configuration-title">
+                Configure Selected Sections
               </h2>
             </div>
-            <Badge className="bg-slate-100 text-slate-700" data-testid="builder-active-sections-badge">
-              {sections.filter((section) => section.enabled).length}/{sections.length} active
+            <Badge className="bg-indigo-100 text-indigo-700" data-testid="builder-selected-sections-badge">
+              {selectedSections.length} selected
             </Badge>
           </div>
 
-          <div className="space-y-6" data-testid="builder-section-stack">
-            {sections.map((section, index) => (
+          {selectedSections.length === 0 && (
+            <div
+              className="noise-overlay rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center"
+              data-testid="builder-configuration-empty-state"
+            >
+              <p className="text-sm font-semibold text-slate-700">No sections selected yet.</p>
+              <p className="mt-2 text-sm text-slate-600">
+                Use the left library pane to pick sections and subsections for this prompt.
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-6" data-testid="builder-configured-section-stack">
+            {selectedSections.map((section, index) => (
               <motion.div
                 key={section.id}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, delay: index * 0.03 }}
-                data-testid={`builder-section-motion-${section.id}`}
+                data-testid={`builder-configured-section-motion-${section.id}`}
               >
                 <SectionCard
                   section={section}
@@ -317,6 +381,9 @@ const BuilderPage = ({ role }) => {
                   activeVariable={activeVariable}
                   onActiveVariableChange={setActiveVariable}
                   onSectionUpdate={(updatedSection) => updateSectionById(section.id, updatedSection)}
+                  showSectionToggle={false}
+                  showSubsectionToggle={false}
+                  onlyShowEnabledSubsections
                 />
               </motion.div>
             ))}
@@ -325,8 +392,8 @@ const BuilderPage = ({ role }) => {
       </section>
 
       <section
-        className="pane-scroll lg:col-span-5 xl:col-span-6 overflow-y-auto bg-white p-6 md:p-8 lg:p-10"
-        data-testid="builder-right-pane"
+        className="pane-scroll lg:col-span-5 overflow-y-auto bg-slate-50/30 p-5 md:p-6"
+        data-testid="builder-preview-pane"
       >
         <div className="sticky top-0 z-10 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 p-3 shadow-sm backdrop-blur-sm" data-testid="preview-export-toolbar">
           <div>
