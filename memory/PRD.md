@@ -50,6 +50,13 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Added **Team Users & Roles** page where admin can create internal users and assign roles
 - Hardened backend authorization so prompt/template writes derive role and username from validated JWT (no client-header trust)
 
+### 2026-03-13 (Template Structure Upgrade)
+- Updated **Agent Persona** template to include mandatory inputs (Agent Name, Agent Role, Agent Objective), gender dropdown (female/male/neutral), and optional **Company Details** subsection
+- Rebuilt **Language Detection & Consistency** template into configurable subsections: Supported Languages, Switching Between Languages, Unsupported Switch Handling, Switch Samples, and Allow Switch Back
+- Added new variable input types in builder UI: `select`, `multiselect`, and `textarea` with deterministic compile compatibility
+- Added required-field validation before save for selected sections/subsections
+- Added template hydration logic so loaded drafts retain correct variable controls from latest template definitions
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
