@@ -54,12 +54,14 @@ export const createBuilderSectionsFromTemplates = (templates = []) =>
     name: template.name,
     enabled: Boolean(template.enabled_by_default),
     raw_text: template.template_text,
+    variable_definitions: template.variables || [],
     variable_values: mergeVariableDefaults(template.variables, template.template_text),
     subsections: (template.subsections || []).map((subsection) => ({
       id: subsection.id,
       title: subsection.title,
       enabled: Boolean(subsection.enabled_by_default),
       raw_text: subsection.template_text,
+      variable_definitions: subsection.variables || [],
       variable_values: mergeVariableDefaults(subsection.variables, subsection.template_text),
     })),
   }));
@@ -109,4 +111,60 @@ export const compilePromptOutput = (sections = []) => {
     compiledPrompt: parts.join("\n\n").trim(),
     sectionSnippets: snippets,
   };
+};
+
+export const getMissingRequiredVariables = (sections = []) => {
+  const missing = [];
+
+  sections
+    .filter((section) => section.enabled)
+    .forEach((section) => {
+      (section.variable_definitions || [])
+        .filter((definition) => definition.required)
+        .forEach((definition) => {
+          const value = section.variable_values?.[definition.key] || "";
+          if (!value.trim()) {
+            missing.push(`${section.name} → ${definition.label || definition.key}`);
+          }
+        });
+
+      (section.subsections || [])
+        .filter((subsection) => subsection.enabled)
+        .forEach((subsection) => {
+          (subsection.variable_definitions || [])
+            .filter((definition) => definition.required)
+            .forEach((definition) => {
+              const value = subsection.variable_values?.[definition.key] || "";
+              if (!value.trim()) {
+                missing.push(`${section.name} / ${subsection.title} → ${definition.label || definition.key}`);
+              }
+            });
+        });
+    });
+
+  return missing;
+};
+
+export const hydrateDraftSectionsFromTemplates = (draftSections = [], templates = []) => {
+  const templateMap = templates.reduce((accumulator, template) => {
+    accumulator[template.id] = template;
+    return accumulator;
+  }, {});
+
+  return draftSections.map((section) => {
+    const template = templateMap[section.id];
+
+    return {
+      ...section,
+      variable_definitions: template?.variables || section.variable_definitions || [],
+      subsections: (section.subsections || []).map((subsection) => {
+        const templateSubsection = (template?.subsections || []).find((item) => item.id === subsection.id);
+
+        return {
+          ...subsection,
+          variable_definitions: templateSubsection?.variables || subsection.variable_definitions || [],
+        };
+      }),
+    };
+  });
 };

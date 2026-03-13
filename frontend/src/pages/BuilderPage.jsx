@@ -17,7 +17,12 @@ import {
   fetchTemplates,
   updatePromptDraft,
 } from "@/lib/api";
-import { compilePromptOutput, createBuilderSectionsFromTemplates } from "@/lib/promptBuilder";
+import {
+  compilePromptOutput,
+  createBuilderSectionsFromTemplates,
+  getMissingRequiredVariables,
+  hydrateDraftSectionsFromTemplates,
+} from "@/lib/promptBuilder";
 
 const EMPTY_METADATA = {
   title: "",
@@ -56,7 +61,7 @@ const BuilderPage = ({ currentUser }) => {
           customer_name: draft.customer_name,
           use_case: draft.use_case,
         });
-        setSections(draft.sections);
+        setSections(hydrateDraftSectionsFromTemplates(draft.sections, templates));
       } else {
         setDraftId("");
         setMetadata({
@@ -194,6 +199,13 @@ const BuilderPage = ({ currentUser }) => {
   const handleSaveDraft = async () => {
     if (isReadOnly) {
       toast.error("Viewer role has read-only access.");
+      return;
+    }
+
+    const missingRequiredVariables = getMissingRequiredVariables(sections);
+    if (missingRequiredVariables.length > 0) {
+      const preview = missingRequiredVariables.slice(0, 3).join(" | ");
+      toast.error(`Fill required fields before saving. Missing: ${preview}`);
       return;
     }
 

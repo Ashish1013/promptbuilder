@@ -37,6 +37,8 @@ class VariableDefinition(BaseModel):
     placeholder: str = ""
     required: bool = True
     default_value: str = ""
+    input_type: Literal["text", "textarea", "select", "multiselect"] = "text"
+    options: List[str] = Field(default_factory=list)
 
 
 class TemplateSubSection(BaseModel):
@@ -270,7 +272,7 @@ def get_default_templates() -> List[PromptSectionTemplate]:
                 "# Agent Persona\n"
                 "## Name = {agent_name}\n"
                 "## Role = {agent_role}\n"
-                "## Gender = {agent_gender_style}\n"
+                "## Gender = {agent_gender}\n"
                 "## Objective = {agent_objective}"
             ),
             variables=[
@@ -282,19 +284,56 @@ def get_default_templates() -> List[PromptSectionTemplate]:
                     required=True,
                 ),
                 VariableDefinition(
-                    key="agent_gender_style",
-                    label="Voice Style",
-                    placeholder="Female. You talk like female.",
+                    key="agent_gender",
+                    label="Gender",
                     required=True,
+                    input_type="select",
+                    options=["female", "male", "neutral"],
+                    default_value="female",
                 ),
                 VariableDefinition(
                     key="agent_objective",
-                    label="Objective",
+                    label="Agent Objective",
                     placeholder="Notify supervisors about missed checklist.",
                     required=True,
                 ),
             ],
-            subsections=[],
+            subsections=[
+                TemplateSubSection(
+                    id="company_details",
+                    title="Company Details",
+                    description="Optional company context subsection.",
+                    template_text=(
+                        "### Company Details\n"
+                        "Company Name: {company_name}\n"
+                        "Company Context: {company_context}\n"
+                        "Business Outcome: {company_business_outcome}"
+                    ),
+                    variables=[
+                        VariableDefinition(
+                            key="company_name",
+                            label="Company Name",
+                            placeholder="3eco",
+                            required=False,
+                        ),
+                        VariableDefinition(
+                            key="company_context",
+                            label="Company Context",
+                            placeholder="Fleet operations compliance workflows.",
+                            required=False,
+                            input_type="textarea",
+                        ),
+                        VariableDefinition(
+                            key="company_business_outcome",
+                            label="Business Outcome",
+                            placeholder="Reduce missed checklist incidents and penalties.",
+                            required=False,
+                            input_type="textarea",
+                        ),
+                    ],
+                    enabled_by_default=False,
+                )
+            ],
         ),
         PromptSectionTemplate(
             id="language_guidelines",
@@ -303,66 +342,160 @@ def get_default_templates() -> List[PromptSectionTemplate]:
             template_text=(
                 "## Language Detection & Consistency\n"
                 "**CRITICAL: Maintain language consistency throughout the conversation.**\n"
-                "Default language: {default_language}."
+                "If no subsection is selected, follow this supported-language policy: {default_supported_policy}"
             ),
             variables=[
                 VariableDefinition(
-                    key="default_language",
-                    label="Default Language",
-                    placeholder="Mumbai Hindi/Hinglish",
+                    key="default_supported_policy",
+                    label="Default Supported Policy",
+                    placeholder="Continue in language defined in call flow unless explicit switch request.",
                     required=True,
-                    default_value="Mumbai Hindi/Hinglish",
+                    default_value="Continue in the language established by call flow unless the user explicitly asks to switch.",
+                    input_type="textarea",
                 ),
             ],
             subsections=[
                 TemplateSubSection(
-                    id="detection_logic",
-                    title="Detection Logic",
-                    description="Rules to classify sentence language.",
+                    id="supported_languages",
+                    title="Supported Languages",
+                    description="Choose supported languages and edit default explanations.",
                     template_text=(
-                        "### Detection Logic\n"
-                        "Detect language using sentence structure, verbs and auxiliaries.\n"
-                        "Ignore brand names: {ignore_brands}\n"
-                        "Ignore app terms: {ignore_app_terms}\n"
-                        "Ignore locations: {ignore_locations}"
+                        "### Supported Languages\n"
+                        "Configured supported languages: {supported_languages}\n"
+                        "- English: {english_language_explanation}\n"
+                        "- Hindi/Hinglish: {hindi_language_explanation}\n"
+                        "- Tamil/Tanglish: {tamil_language_explanation}"
                     ),
                     variables=[
                         VariableDefinition(
-                            key="ignore_brands",
-                            label="Brand Names to Ignore",
-                            placeholder="Grab, JioMart, Jio",
+                            key="supported_languages",
+                            label="Supported Languages",
                             required=True,
+                            input_type="multiselect",
+                            options=["English", "Hindi/Hinglish", "Tamil/Tanglish"],
+                            default_value="English, Hindi/Hinglish",
                         ),
                         VariableDefinition(
-                            key="ignore_app_terms",
-                            label="App Terms to Ignore",
-                            placeholder="App, Play Store, Link, Download, Android",
-                            required=True,
+                            key="english_language_explanation",
+                            label="English Explanation",
+                            placeholder="Switch to English for complete English sentence structures.",
+                            required=False,
+                            input_type="textarea",
+                            default_value="Use English when user communicates in full English sentence structure.",
                         ),
                         VariableDefinition(
-                            key="ignore_locations",
-                            label="Locations to Ignore",
-                            placeholder="Mumbai, Thane, Navi Mumbai",
-                            required=True,
+                            key="hindi_language_explanation",
+                            label="Hindi/Hinglish Explanation",
+                            placeholder="Maintain Hindi/Hinglish when grammar is Hindi dominant.",
+                            required=False,
+                            input_type="textarea",
+                            default_value="Default to Hindi/Hinglish when sentence grammar is Hindi dominant.",
+                        ),
+                        VariableDefinition(
+                            key="tamil_language_explanation",
+                            label="Tamil/Tanglish Explanation",
+                            placeholder="Switch to Tanglish for Tamil-native user requests.",
+                            required=False,
+                            input_type="textarea",
+                            default_value="Use Tanglish only when user clearly communicates in Tamil-native style.",
                         ),
                     ],
                 ),
                 TemplateSubSection(
-                    id="switching_rules",
-                    title="Switching Rules",
-                    description="When to switch language and when to hold.",
+                    id="switching_between_languages",
+                    title="Switching Between Languages",
+                    description="Define trigger mode for language switch.",
                     template_text=(
-                        "### Switching Rules\n"
-                        "If mixed sentence has Hindi grammar, stay in {default_language}.\n"
-                        "Switch to English only when user speaks full English sentence structures.\n"
-                        "Human fillers style: {human_fillers_style}"
+                        "### Switching Between Languages\n"
+                        "Switch trigger mode: {switch_trigger_mode}\n"
+                        "Ask language preference in call flow: {ask_language_preference_in_flow}"
                     ),
                     variables=[
                         VariableDefinition(
-                            key="human_fillers_style",
-                            label="Human Fillers Style",
-                            placeholder="Use fillers like 'Yeah, um... so' naturally.",
+                            key="switch_trigger_mode",
+                            label="Switch Trigger Mode",
+                            required=True,
+                            input_type="select",
+                            options=["Based on user language", "Based on explicit request only"],
+                            default_value="Based on explicit request only",
+                        ),
+                        VariableDefinition(
+                            key="ask_language_preference_in_flow",
+                            label="Ask Language Preference in Call Flow",
                             required=False,
+                            input_type="select",
+                            options=["ON", "OFF"],
+                            default_value="OFF",
+                        ),
+                    ],
+                ),
+                TemplateSubSection(
+                    id="unsupported_language_switch",
+                    title="Handling Unsupported Language Switch Requests",
+                    description="Define fallback when user asks unsupported language.",
+                    template_text=(
+                        "### Handling Unsupported Language Switch Requests\n"
+                        "Fallback policy: {unsupported_language_switch_policy}"
+                    ),
+                    variables=[
+                        VariableDefinition(
+                            key="unsupported_language_switch_policy",
+                            label="Unsupported Language Policy",
+                            placeholder="Politely acknowledge and continue in nearest supported language.",
+                            required=True,
+                            input_type="textarea",
+                            default_value="Acknowledge request politely and continue in nearest supported language while offering escalation.",
+                        ),
+                    ],
+                ),
+                TemplateSubSection(
+                    id="language_switch_samples",
+                    title="Samples of Detecting Language Switch",
+                    description="Used when switch is explicit-request driven.",
+                    template_text=(
+                        "### Samples of Detecting Language Switch\n"
+                        "Sample 1: {switch_sample_1}\n"
+                        "Sample 2: {switch_sample_2}\n"
+                        "Sample 3: {switch_sample_3}"
+                    ),
+                    variables=[
+                        VariableDefinition(
+                            key="switch_sample_1",
+                            label="Switch Sample 1",
+                            required=False,
+                            input_type="textarea",
+                        ),
+                        VariableDefinition(
+                            key="switch_sample_2",
+                            label="Switch Sample 2",
+                            required=False,
+                            input_type="textarea",
+                        ),
+                        VariableDefinition(
+                            key="switch_sample_3",
+                            label="Switch Sample 3",
+                            required=False,
+                            input_type="textarea",
+                        ),
+                    ],
+                    enabled_by_default=False,
+                ),
+                TemplateSubSection(
+                    id="allow_switch_back",
+                    title="Allow Switch Back",
+                    description="Switch back control policy.",
+                    template_text=(
+                        "### Allow Switch Back\n"
+                        "Switch back policy: {switch_back_policy}"
+                    ),
+                    variables=[
+                        VariableDefinition(
+                            key="switch_back_policy",
+                            label="Switch Back Policy",
+                            required=True,
+                            input_type="select",
+                            options=["Only when explicitly asked"],
+                            default_value="Only when explicitly asked",
                         ),
                     ],
                 ),
@@ -449,6 +582,16 @@ def get_default_templates() -> List[PromptSectionTemplate]:
             subsections=[],
         ),
     ]
+
+
+async def ensure_default_templates_seeded() -> None:
+    defaults = get_default_templates()
+    for template in defaults:
+        await db.template_sections.update_one(
+            {"id": template.id},
+            {"$set": template.model_dump()},
+            upsert=True,
+        )
 
 
 def extract_placeholders(template_text: str) -> List[str]:
@@ -628,12 +771,8 @@ async def get_roles_matrix(authorization: Optional[str] = Header(default=None)) 
 @api_router.get("/templates", response_model=List[PromptSectionTemplate])
 async def get_templates(authorization: Optional[str] = Header(default=None)) -> List[PromptSectionTemplate]:
     _ = await get_current_user_from_authorization(authorization)
+    await ensure_default_templates_seeded()
     template_docs = await db.template_sections.find({}, {"_id": 0}).to_list(100)
-
-    if not template_docs:
-        defaults = get_default_templates()
-        await db.template_sections.insert_many([template.model_dump() for template in defaults])
-        return defaults
 
     return [PromptSectionTemplate(**doc) for doc in template_docs]
 
@@ -807,6 +946,7 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup_seed_data() -> None:
     await ensure_default_admin_user()
+    await ensure_default_templates_seeded()
 
 
 @app.on_event("shutdown")

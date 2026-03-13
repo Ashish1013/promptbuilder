@@ -1,0 +1,31 @@
+{
+  "summary": "Executed targeted backend + frontend regression for the template structure update (agent persona, company subsection, language-detection subsections, validation, and compile baseline behavior) on the public URL.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_template_structure_language_persona.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_template_structure_language_persona.py",
+    "/app/test_reports/iteration_4.json"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 targeted pytest tests passed)",
+    "frontend": "100% (all requested UI/integration checks passed in executed flow)"
+  },
+  "seed_data_creation": "No persistent seed data created.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Validated as admin on public URL: gender is rendered as select with male/female/neutral options; company_details subsection is optional and disabled by default; language section includes supported_languages/switching/unsupported/examples/switch-back controls; save is blocked when required persona fields are empty; when all language subsections are disabled, preview keeps base supported-language policy line and removes subsection blocks.",
+  "rca of the issue": "No new defects found in this scope."
+}
