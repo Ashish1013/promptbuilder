@@ -1,0 +1,232 @@
+{
+  "metadata": {
+    "project_name": "ReachAll AI Prompt Builder",
+    "version": "1.0",
+    "description": "A high-efficiency, semi-automated prompt engineering workspace for internal delivery teams.",
+    "persona": "The Performance Pro (Archetype 2) - Tactical, Precise, High-Density."
+  },
+  "design_system": {
+    "typography": {
+      "font_family": {
+        "headings": "Manrope, sans-serif",
+        "body": "Inter, system-ui, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "scale": {
+        "h1": "text-4xl font-extrabold tracking-tight lg:text-5xl",
+        "h2": "text-3xl font-bold tracking-tight",
+        "h3": "text-2xl font-semibold tracking-tight",
+        "h4": "text-xl font-semibold tracking-tight",
+        "body_large": "text-lg leading-7",
+        "body_default": "text-base leading-relaxed",
+        "body_small": "text-sm font-medium leading-none",
+        "mono_code": "text-sm font-mono"
+      },
+      "weights": {
+        "regular": "400",
+        "medium": "500",
+        "semibold": "600",
+        "bold": "700",
+        "extrabold": "800"
+      },
+      "rules": [
+        "Use 'Manrope' for all Headings (H1-H4).",
+        "Use 'Inter' for UI labels, body text, and inputs.",
+        "Use 'JetBrains Mono' for ALL raw prompt text, variables, and code snippets.",
+        "CRITICAL: Headings must use tight tracking (tracking-tight).",
+        "CRITICAL: Uppercase labels must be tracked wide (tracking-wider) and tiny (text-[10px] or text-xs)."
+      ]
+    },
+    "colors": {
+      "palette": {
+        "primary": {
+          "DEFAULT": "#4F46E5",
+          "foreground": "#FFFFFF",
+          "description": "Deep Indigo - Used for primary actions, active states, and focus rings."
+        },
+        "secondary": {
+          "DEFAULT": "#F1F5F9",
+          "foreground": "#0F172A",
+          "description": "Slate 100 - Used for secondary buttons, muted backgrounds."
+        },
+        "accent": {
+          "DEFAULT": "#EEF2FF",
+          "foreground": "#4338CA",
+          "description": "Indigo 50 - Used for active selection backgrounds, subtle highlights."
+        },
+        "background": {
+          "DEFAULT": "#F8FAFC",
+          "paper": "#FFFFFF",
+          "dark": "#020617"
+        },
+        "surface": {
+          "DEFAULT": "#FFFFFF",
+          "muted": "#F1F5F9"
+        },
+        "border": {
+          "DEFAULT": "#E2E8F0",
+          "subtle": "#F1F5F9",
+          "strong": "#CBD5E1"
+        },
+        "status": {
+          "success": "#10B981",
+          "warning": "#F59E0B",
+          "error": "#EF4444",
+          "info": "#3B82F6"
+        },
+        "syntax": {
+          "variable": "#D946EF",
+          "string": "#22C55E",
+          "keyword": "#3B82F6"
+        }
+      },
+      "tokens": {
+        "text-primary": "text-slate-900",
+        "text-secondary": "text-slate-500",
+        "text-muted": "text-slate-400",
+        "bg-app": "bg-slate-50",
+        "bg-card": "bg-white",
+        "border-default": "border-slate-200"
+      }
+    },
+    "spacing": {
+      "container_padding": "p-6 md:p-8 lg:p-10",
+      "section_gap": "gap-8",
+      "component_gap": "gap-4",
+      "input_height": "h-10",
+      "button_height": "h-10",
+      "touch_target": "min-h-[44px]"
+    },
+    "layout": {
+      "radius": {
+        "default": "rounded-lg",
+        "small": "rounded-md",
+        "large": "rounded-xl",
+        "full": "rounded-full"
+      },
+      "shadows": {
+        "card": "shadow-sm hover:shadow-md transition-shadow duration-200",
+        "dropdown": "shadow-lg border border-slate-100",
+        "sticky": "shadow-md",
+        "focus": "ring-2 ring-indigo-500 ring-offset-2"
+      }
+    }
+  },
+  "components": {
+    "Button": {
+      "variants": {
+        "default": "bg-primary text-primary-foreground shadow hover:bg-primary/90 rounded-md font-medium transition-all active:scale-95",
+        "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md transition-all active:scale-95",
+        "ghost": "hover:bg-accent hover:text-accent-foreground rounded-md transition-colors",
+        "destructive": "bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md shadow-sm"
+      },
+      "usage": "Use 'default' for primary actions (Save, Compile). Use 'outline' for secondary (Cancel, Export). Use 'ghost' for icon-only buttons."
+    },
+    "Card": {
+      "style": "bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden",
+      "usage": "Used for 'Prompt Sections' (e.g., Persona, Language). Each section is a card."
+    },
+    "Input": {
+      "style": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all",
+      "usage": "Used for variable inputs."
+    },
+    "Badge": {
+      "style": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      "variants": {
+        "variable": "border-transparent bg-indigo-100 text-indigo-800 hover:bg-indigo-200",
+        "section": "border-slate-200 bg-slate-50 text-slate-900"
+      }
+    },
+    "Switch": {
+      "style": "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-slate-200",
+      "usage": "Used to toggle Prompt Sections on/off."
+    }
+  },
+  "layout_patterns": {
+    "SplitPaneWorkspace": {
+      "description": "The core workspace layout. Left side for editing, Right side for preview.",
+      "structure": "grid grid-cols-1 lg:grid-cols-12 gap-0 h-[calc(100vh-64px)] overflow-hidden",
+      "left_pane": "lg:col-span-7 xl:col-span-6 overflow-y-auto p-6 md:p-8 border-r border-slate-200 bg-slate-50/50",
+      "right_pane": "lg:col-span-5 xl:col-span-6 bg-white overflow-y-auto p-8 lg:p-12 shadow-inner relative"
+    },
+    "SectionCardStack": {
+      "description": "Vertical stack of cards in the Builder pane.",
+      "container": "flex flex-col gap-6",
+      "item": "group relative transition-all duration-300 ease-in-out"
+    }
+  },
+  "visual_enhancements": {
+    "micro_interactions": [
+      "Hovering over a variable input highlights the corresponding text in the Preview pane.",
+      "Toggling a section switch animates the card height (accordion style).",
+      "Buttons have a subtle active scale (scale-95) for tactile feel."
+    ],
+    "textures": {
+      "noise": "Add a subtle noise texture to the sidebar or empty states to reduce 'digital flatness'.",
+      "gradients": "Use extremely subtle gradients (slate-50 to white) on cards. No harsh gradients."
+    },
+    "motion": {
+      "library": "framer-motion",
+      "recommendation": "Use <AnimatePresence> for adding/removing sections. Use layoutId for smooth reordering if implemented."
+    }
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px or 2px. Size 16px (sm) or 20px (md).",
+      "mapping": {
+        "edit": "Edit3",
+        "save": "Save",
+        "export": "Download",
+        "settings": "Settings",
+        "user": "User",
+        "copy": "Copy",
+        "check": "Check",
+        "alert": "AlertCircle",
+        "expand": "ChevronDown",
+        "collapse": "ChevronUp",
+        "trash": "Trash2",
+        "plus": "Plus",
+        "variable": "Braces"
+      }
+    },
+    "images": []
+  },
+  "accessibility": {
+    "contrast": "Ensure all text meets WCAG AA standards (4.5:1). Use slate-600+ for text on white.",
+    "focus": "All interactive elements must have a visible focus ring.",
+    "keyboard": "Ensure all form inputs and toggles are keyboard navigable (Tab index).",
+    "screen_readers": "Use aria-expanded on accordions and aria-label on icon-only buttons."
+  },
+  "instructions_to_main_agent": [
+    "1. Setup: Install 'framer-motion' if not present. Use 'clsx' and 'tailwind-merge' for class handling.",
+    "2. File Structure: Create a 'components/prompt-builder' directory for specific components.",
+    "3. State Management: Use a robust local state (useReducer or Context) to handle the complex object of { sections, active_sections, variables }.",
+    "4. Preview Logic: Create a 'compilePrompt' utility function that takes the state and returns a formatted string.",
+    "5. Raw Editor: When 'Edit Raw' is toggled, showing the template text with placeholders. Changes here should update the template for this instance.",
+    "6. Variable Parsing: Implement a regex utility to detect {variable_name} in text and auto-generate inputs.",
+    "7. DO NOT use standard browser alerts. Use 'sonner' for all notifications.",
+    "8. THEME: Default to Light mode. Dark mode is optional but supported via Tailwind 'dark:' classes.",
+    "9. CRITICAL: Avoid 'Inter' for Headings. Use 'Manrope' (Google Fonts) or 'Plus Jakarta Sans'.",
+    "10. Empty States: Make them beautiful. Use a dashed border container with a muted icon and clear CTA."
+  ],
+  "universal_guidelines": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy",
+    "Use glass-morphism effects with backdrop filters (12-24px blur)",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file. This disrupts the human natural reading flow of text",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯📚🎭🎬🎪🎉🎊🎁🎀🎂🍰🎈🎨🎰💰💵💳🏦💎🪙💸🤑📊📈📉💹🔢🏆🥇 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories (especially sponsor logos) = main agent will use placeholder text which is FORBIDDEN",
+    "Prioritize using pre-existing components from src/components/ui when applicable",
+    "Components MUST use named exports (export const ComponentName = ...)",
+    "Pages MUST use default exports (export default function PageName() {...})",
+    "Use 'sonner' for toasts. Sonner component are located in /app/src/components/ui/sonner.tsx"
+  ]
+}
