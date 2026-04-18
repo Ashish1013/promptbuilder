@@ -88,6 +88,12 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Fixed variable option input behavior to properly support comma-separated entries for select/multiselect
 - Added variable delete actions (section + subsection) that remove both variable config and placeholder token references from template text
 
+### 2026-04-18 (Template Lifecycle + Subsection Controls)
+- Added subsection removal controls so subsection count can be reduced from any positive number down to zero
+- Added explicit template unarchive action from Archived view
+- Enforced unarchive behavior to always return template as **not-ready (draft)**
+- Preserved explicit readiness control so users can re-mark unarchived templates as ready manually when needed
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
