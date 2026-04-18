@@ -3,16 +3,13 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { extractVariableKeysFromText, syncVariableValuesFromText } from "@/lib/promptBuilder";
 
-const mergeVariableKeys = (text, variableValues = {}, variableDefinitions = []) => {
+const mergeVariableKeys = (text) => {
   const textKeys = extractVariableKeysFromText(text);
-  const definitionKeys = variableDefinitions.map((definition) => definition.key);
-  const keys = [...definitionKeys, ...textKeys];
-  return [...new Set(keys)];
+  return [...new Set(textKeys)];
 };
 
 const getDefinitionMap = (definitions = []) =>
@@ -20,6 +17,16 @@ const getDefinitionMap = (definitions = []) =>
     accumulator[definition.key] = definition;
     return accumulator;
   }, {});
+
+const getDefinitionByKey = (definitionMap = {}, variableKey = "") => {
+  if (definitionMap[variableKey]) {
+    return definitionMap[variableKey];
+  }
+
+  const normalizedKey = variableKey.trim().toLowerCase();
+  const match = Object.keys(definitionMap).find((candidateKey) => candidateKey.trim().toLowerCase() === normalizedKey);
+  return match ? definitionMap[match] : null;
+};
 
 const parseMultiSelectValue = (value = "") =>
   value
@@ -50,8 +57,8 @@ export const SectionCard = ({
   );
 
   const sectionVariableKeys = useMemo(
-    () => mergeVariableKeys(section.raw_text, section.variable_values, section.variable_definitions),
-    [section.raw_text, section.variable_values, section.variable_definitions],
+    () => mergeVariableKeys(section.raw_text),
+    [section.raw_text],
   );
 
   const updateSectionField = (field, value) => {
@@ -145,26 +152,31 @@ export const SectionCard = ({
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 xl:grid-cols-2">
             {sectionVariableKeys.map((variableKey) => (
-              <div key={`${section.id}-${variableKey}`} className="space-y-2">
+              <div key={`${section.id}-${variableKey}`} className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/40 p-3">
+                {(() => {
+                  const variableDefinition = getDefinitionByKey(sectionDefinitionMap, variableKey);
+
+                  return (
+                    <>
                 <label
                   htmlFor={`${section.id}-${variableKey}`}
-                  className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
+                  className="text-sm font-semibold text-slate-800"
                   data-testid={`section-variable-label-${section.id}-${variableKey}`}
                 >
                   {variableKey}
                 </label>
-                {sectionDefinitionMap[variableKey]?.label && sectionDefinitionMap[variableKey]?.label !== variableKey && (
+                {variableDefinition?.label && variableDefinition?.label !== variableKey && (
                   <p className="text-xs text-slate-500" data-testid={`section-variable-help-${section.id}-${variableKey}`}>
-                    {sectionDefinitionMap[variableKey]?.label}
+                    {variableDefinition?.label}
                   </p>
                 )}
                 <p className="text-[11px] text-slate-500" data-testid={`section-variable-meta-${section.id}-${variableKey}`}>
-                  {sectionDefinitionMap[variableKey]?.required ? "Required" : "Optional"}
+                  {variableDefinition?.required ? "Required" : "Optional"}
                 </p>
 
-                {sectionDefinitionMap[variableKey]?.input_type === "textarea" && (
+                {variableDefinition?.input_type === "textarea" && (
                   <Textarea
                     id={`${section.id}-${variableKey}`}
                     value={section.variable_values[variableKey] || ""}
@@ -172,12 +184,12 @@ export const SectionCard = ({
                     onFocus={() => onActiveVariableChange(variableKey)}
                     onBlur={() => onActiveVariableChange("")}
                     disabled={readOnly}
-                    className={`min-h-24 ${activeVariable === variableKey ? "ring-2 ring-indigo-500 ring-offset-2" : ""}`}
+                    className={`min-h-32 resize-y bg-white ${activeVariable === variableKey ? "ring-2 ring-indigo-500 ring-offset-2" : ""}`}
                     data-testid={`section-variable-input-${section.id}-${variableKey}`}
                   />
                 )}
 
-                {sectionDefinitionMap[variableKey]?.input_type === "select" && (
+                {variableDefinition?.input_type === "select" && (
                   <select
                     id={`${section.id}-${variableKey}`}
                     value={section.variable_values[variableKey] || ""}
@@ -188,7 +200,7 @@ export const SectionCard = ({
                     className={`h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm ${activeVariable === variableKey ? "ring-2 ring-indigo-500 ring-offset-2" : ""}`}
                     data-testid={`section-variable-input-${section.id}-${variableKey}`}
                   >
-                    {(sectionDefinitionMap[variableKey]?.options || []).map((option) => (
+                    {(variableDefinition?.options || []).map((option) => (
                       <option key={`${section.id}-${variableKey}-${option}`} value={option}>
                         {option}
                       </option>
@@ -196,9 +208,9 @@ export const SectionCard = ({
                   </select>
                 )}
 
-                {sectionDefinitionMap[variableKey]?.input_type === "multiselect" && (
+                {variableDefinition?.input_type === "multiselect" && (
                   <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2" data-testid={`section-multiselect-${section.id}-${variableKey}`}>
-                    {(sectionDefinitionMap[variableKey]?.options || []).map((option) => {
+                    {(variableDefinition?.options || []).map((option) => {
                       const selectedValues = parseMultiSelectValue(section.variable_values[variableKey] || "");
                       const isSelected = selectedValues.includes(option);
 
@@ -229,19 +241,21 @@ export const SectionCard = ({
                   </div>
                 )}
 
-                {(!sectionDefinitionMap[variableKey]?.input_type ||
-                  sectionDefinitionMap[variableKey]?.input_type === "text") && (
-                  <Input
+                {(!variableDefinition?.input_type || variableDefinition?.input_type === "text") && (
+                  <Textarea
                     id={`${section.id}-${variableKey}`}
                     value={section.variable_values[variableKey] || ""}
                     onChange={(event) => updateSectionVariable(variableKey, event.target.value)}
                     onFocus={() => onActiveVariableChange(variableKey)}
                     onBlur={() => onActiveVariableChange("")}
                     disabled={readOnly}
-                    className={activeVariable === variableKey ? "ring-2 ring-indigo-500 ring-offset-2" : ""}
+                    className={`min-h-24 resize-y bg-white ${activeVariable === variableKey ? "ring-2 ring-indigo-500 ring-offset-2" : ""}`}
                     data-testid={`section-variable-input-${section.id}-${variableKey}`}
                   />
                 )}
+                    </>
+                  );
+                })()}
               </div>
             ))}
           </div>
@@ -286,11 +300,7 @@ export const SectionCard = ({
 
               {visibleSubsections.map((subsection) => {
                 const subsectionDefinitionMap = getDefinitionMap(subsection.variable_definitions || []);
-                const subsectionVariableKeys = mergeVariableKeys(
-                  subsection.raw_text,
-                  subsection.variable_values,
-                  subsection.variable_definitions,
-                );
+                const subsectionVariableKeys = mergeVariableKeys(subsection.raw_text);
                 const rawVisible = subsectionRawState[subsection.id] || false;
 
                 return (
@@ -347,26 +357,33 @@ export const SectionCard = ({
 
                     {subsection.enabled && (
                       <>
-                        <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-3 xl:grid-cols-2">
                           {subsectionVariableKeys.map((variableKey) => (
-                            <div key={`${subsection.id}-${variableKey}`} className="space-y-1.5">
+                            <div
+                              key={`${subsection.id}-${variableKey}`}
+                              className="space-y-2 rounded-md border border-slate-200 bg-white p-3"
+                            >
+                              {(() => {
+                                const variableDefinition = getDefinitionByKey(subsectionDefinitionMap, variableKey);
+
+                                return (
+                                  <>
                               <label
                                 htmlFor={`${subsection.id}-${variableKey}`}
-                                className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500"
+                                className="text-sm font-semibold text-slate-800"
                                 data-testid={`subsection-variable-label-${section.id}-${subsection.id}-${variableKey}`}
                               >
                                 {variableKey}
                               </label>
-                              {subsectionDefinitionMap[variableKey]?.label &&
-                                subsectionDefinitionMap[variableKey]?.label !== variableKey && (
+                              {variableDefinition?.label && variableDefinition?.label !== variableKey && (
                                   <p
                                     className="text-xs text-slate-500"
                                     data-testid={`subsection-variable-help-${section.id}-${subsection.id}-${variableKey}`}
                                   >
-                                    {subsectionDefinitionMap[variableKey]?.label}
+                                    {variableDefinition?.label}
                                   </p>
                                 )}
-                              {subsectionDefinitionMap[variableKey]?.input_type === "textarea" && (
+                              {variableDefinition?.input_type === "textarea" && (
                                 <Textarea
                                   id={`${subsection.id}-${variableKey}`}
                                   value={subsection.variable_values[variableKey] || ""}
@@ -387,7 +404,7 @@ export const SectionCard = ({
                                 />
                               )}
 
-                              {subsectionDefinitionMap[variableKey]?.input_type === "select" && (
+                              {variableDefinition?.input_type === "select" && (
                                 <select
                                   id={`${subsection.id}-${variableKey}`}
                                   value={subsection.variable_values[variableKey] || ""}
@@ -406,7 +423,7 @@ export const SectionCard = ({
                                   className={`h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm ${activeVariable === variableKey ? "ring-2 ring-indigo-500 ring-offset-2" : ""}`}
                                   data-testid={`subsection-variable-input-${section.id}-${subsection.id}-${variableKey}`}
                                 >
-                                  {(subsectionDefinitionMap[variableKey]?.options || []).map((option) => (
+                                  {(variableDefinition?.options || []).map((option) => (
                                     <option key={`${subsection.id}-${variableKey}-${option}`} value={option}>
                                       {option}
                                     </option>
@@ -414,12 +431,12 @@ export const SectionCard = ({
                                 </select>
                               )}
 
-                              {subsectionDefinitionMap[variableKey]?.input_type === "multiselect" && (
+                              {variableDefinition?.input_type === "multiselect" && (
                                 <div
                                   className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2"
                                   data-testid={`subsection-multiselect-${section.id}-${subsection.id}-${variableKey}`}
                                 >
-                                  {(subsectionDefinitionMap[variableKey]?.options || []).map((option) => {
+                                  {(variableDefinition?.options || []).map((option) => {
                                     const selectedValues = parseMultiSelectValue(subsection.variable_values[variableKey] || "");
                                     const isSelected = selectedValues.includes(option);
 
@@ -457,9 +474,8 @@ export const SectionCard = ({
                                 </div>
                               )}
 
-                              {(!subsectionDefinitionMap[variableKey]?.input_type ||
-                                subsectionDefinitionMap[variableKey]?.input_type === "text") && (
-                                <Input
+                              {(!variableDefinition?.input_type || variableDefinition?.input_type === "text") && (
+                                <Textarea
                                   id={`${subsection.id}-${variableKey}`}
                                   value={subsection.variable_values[variableKey] || ""}
                                   disabled={readOnly}
@@ -474,10 +490,13 @@ export const SectionCard = ({
                                   }
                                   onFocus={() => onActiveVariableChange(variableKey)}
                                   onBlur={() => onActiveVariableChange("")}
-                                  className={activeVariable === variableKey ? "ring-2 ring-indigo-500 ring-offset-2" : ""}
+                                  className={`min-h-24 resize-y bg-white ${activeVariable === variableKey ? "ring-2 ring-indigo-500 ring-offset-2" : ""}`}
                                   data-testid={`subsection-variable-input-${section.id}-${subsection.id}-${variableKey}`}
                                 />
                               )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           ))}
                         </div>
