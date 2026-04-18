@@ -13,8 +13,10 @@ const UserManagementPage = ({ currentUser }) => {
   const [rolesMatrix, setRolesMatrix] = useState(null);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState("");
+  const [deletingUserId, setDeletingUserId] = useState("");
   const [creating, setCreating] = useState(false);
   const [savingPermissions, setSavingPermissions] = useState(false);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState(null);
   const [newUser, setNewUser] = useState({
     full_name: "",
     username: "",
@@ -90,17 +92,25 @@ const UserManagementPage = ({ currentUser }) => {
       return;
     }
 
-    const confirmDelete = window.confirm("Delete this user and remove access immediately?");
-    if (!confirmDelete) {
+    const user = users.find((item) => item.id === userId);
+    setPendingDeleteUser(user || null);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!pendingDeleteUser) {
       return;
     }
 
+    setDeletingUserId(pendingDeleteUser.id);
     try {
-      await deleteUser(userId);
-      setUsers((prev) => prev.filter((user) => user.id !== userId));
+      await deleteUser(pendingDeleteUser.id);
+      setUsers((prev) => prev.filter((user) => user.id !== pendingDeleteUser.id));
+      setPendingDeleteUser(null);
       toast.success("User deleted.");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Unable to delete user.");
+    } finally {
+      setDeletingUserId("");
     }
   };
 
@@ -253,9 +263,10 @@ const UserManagementPage = ({ currentUser }) => {
                   type="button"
                   variant="destructive"
                   onClick={() => handleDeleteUser(user.id)}
+                  disabled={deletingUserId === user.id}
                   data-testid={`user-delete-button-${user.id}`}
                 >
-                  Delete
+                  {deletingUserId === user.id ? "Deleting..." : "Delete"}
                 </Button>
               </div>
             </div>
@@ -315,6 +326,42 @@ const UserManagementPage = ({ currentUser }) => {
             </table>
           </CardContent>
         </Card>
+      )}
+
+      {pendingDeleteUser && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4" data-testid="delete-user-modal-overlay">
+          <Card className="w-full max-w-lg border-slate-200" data-testid="delete-user-modal-card">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold text-slate-900" data-testid="delete-user-modal-title">
+                Delete User
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-slate-700" data-testid="delete-user-modal-text">
+                This will immediately remove access for <strong>@{pendingDeleteUser.username}</strong>. Do you want to continue?
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPendingDeleteUser(null)}
+                  data-testid="delete-user-modal-cancel-button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={confirmDeleteUser}
+                  disabled={deletingUserId === pendingDeleteUser.id}
+                  data-testid="delete-user-modal-confirm-button"
+                >
+                  {deletingUserId === pendingDeleteUser.id ? "Deleting..." : "Delete User"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

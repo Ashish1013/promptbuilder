@@ -36,6 +36,7 @@ const createNewVariable = () => ({
   default_value: "",
   input_type: "text",
   options: [],
+  options_text: "",
 });
 
 const createNewSubsection = () => ({
@@ -57,6 +58,69 @@ const createNewSection = () => ({
   enabled_by_default: true,
 });
 
+const removePlaceholderToken = (text = "", variableKey = "") => {
+  if (!variableKey?.trim()) {
+    return text;
+  }
+
+  const escaped = variableKey.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`\\{\\s*${escaped}\\s*\\}`, "g");
+  return text.replace(pattern, "").replace(/\s{2,}/g, " ").trim();
+};
+
+const normalizeTemplateForEditing = (template) => {
+  const normalized = JSON.parse(JSON.stringify(template));
+
+  normalized.sections = (normalized.sections || []).map((section) => ({
+    ...section,
+    variables: (section.variables || []).map((variable) => ({
+      ...variable,
+      options_text: (variable.options || []).join(", "),
+    })),
+    subsections: (section.subsections || []).map((subsection) => ({
+      ...subsection,
+      variables: (subsection.variables || []).map((variable) => ({
+        ...variable,
+        options_text: (variable.options || []).join(", "),
+      })),
+    })),
+  }));
+
+  return normalized;
+};
+
+const parseOptionsText = (value = "") =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const prepareTemplateForSave = (template) => {
+  return {
+    ...template,
+    sections: (template.sections || []).map((section) => ({
+      ...section,
+      variables: (section.variables || []).map((variable) => {
+        const { options_text, ...rest } = variable;
+        return {
+          ...rest,
+          options: parseOptionsText(options_text || ""),
+        };
+      }),
+      subsections: (section.subsections || []).map((subsection) => ({
+        ...subsection,
+        variables: (subsection.variables || []).map((variable) => {
+          const { options_text, ...rest } = variable;
+          return {
+            ...rest,
+            options: parseOptionsText(options_text || ""),
+          };
+        }),
+      })),
+    })),
+  };
+};
+
 const TemplatesPage = ({ role }) => {
   const [templates, setTemplates] = useState([]);
   const [archivedTemplates, setArchivedTemplates] = useState([]);
@@ -72,6 +136,7 @@ const TemplatesPage = ({ role }) => {
   const [cloning, setCloning] = useState(false);
   const [archiveInProgressId, setArchiveInProgressId] = useState("");
   const [createModal, setCreateModal] = useState({ open: false, sourceTemplateId: "", newTemplateName: "" });
+  const [archiveModal, setArchiveModal] = useState({ open: false, step: 1, templateId: "", templateName: "" });
 
   const canManageTemplates = role === "admin";
   const visibleTemplateList = showArchivedTemplates ? archivedTemplates : templates;
@@ -119,7 +184,7 @@ const TemplatesPage = ({ role }) => {
   }, []);
 
   const openEditor = (template) => {
-    setEditableTemplate(JSON.parse(JSON.stringify(template)));
+    setEditableTemplate(normalizeTemplateForEditing(template));
     initializeExpansionState(template);
     setIsEditorOpen(true);
   };
@@ -248,23 +313,26 @@ const TemplatesPage = ({ role }) => {
       return;
     }
 
-    const stepOne = window.confirm("Step 1: Archive this template?");
-    if (!stepOne) {
+    const template = templates.find((item) => item.id === templateId);
+    setArchiveModal({
+      open: true,
+      step: 1,
+      templateId,
+      templateName: template?.name || "this template",
+    });
+  };
+
+  const confirmArchiveTemplate = async () => {
+    if (!archiveModal.templateId) {
       return;
     }
 
-    const stepTwo = window.confirm(
-      "Step 2: This will move the template to Archived and automatically mark it Not Ready. Confirm again.",
-    );
-    if (!stepTwo) {
-      return;
-    }
-
-    setArchiveInProgressId(templateId);
+    setArchiveInProgressId(archiveModal.templateId);
     try {
-      await archiveTemplateLibraryItem(templateId);
+      await archiveTemplateLibraryItem(archiveModal.templateId);
       await loadTemplates();
       toast.success("Template archived.");
+      setArchiveModal({ open: false, step: 1, templateId: "", templateName: "" });
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Unable to archive template.");
     } finally {
@@ -279,12 +347,13 @@ const TemplatesPage = ({ role }) => {
 
     setSaving(true);
     try {
+      const prepared = prepareTemplateForSave(editableTemplate);
       const updated = await updateTemplateLibraryItem(editableTemplate.id, {
-        name: editableTemplate.name,
-        status: editableTemplate.status,
-        sections: editableTemplate.sections,
+        name: prepared.name,
+        status: prepared.status,
+        sections: prepared.sections,
       });
-      setEditableTemplate(JSON.parse(JSON.stringify(updated)));
+      setEditableTemplate(normalizeTemplateForEditing(updated));
       await loadTemplates();
       toast.success("Template saved with current sequence.");
     } catch (error) {
@@ -438,6 +507,63 @@ const TemplatesPage = ({ role }) => {
                 <Button type="button" onClick={handleCreateFromExisting} disabled={cloning} data-testid="template-create-modal-confirm-button">
                   {cloning ? "Creating..." : "Create and Open Editor"}
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {archiveModal.open && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4" data-testid="template-archive-modal-overlay">
+          <Card className="w-full max-w-xl border-slate-200" data-testid="template-archive-modal-card">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold text-slate-900" data-testid="template-archive-modal-title">
+                Archive Template Confirmation
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {archiveModal.step === 1 && (
+                <p className="text-sm text-slate-700" data-testid="template-archive-step-1-text">
+                  Step 1: Do you want to archive <strong>{archiveModal.templateName}</strong>?
+                </p>
+              )}
+
+              {archiveModal.step === 2 && (
+                <p className="text-sm text-slate-700" data-testid="template-archive-step-2-text">
+                  Step 2: This will move the template to <strong>Archived</strong> and set it to <strong>Not Ready</strong>. Confirm to continue.
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setArchiveModal({ open: false, step: 1, templateId: "", templateName: "" })}
+                  data-testid="template-archive-cancel-button"
+                >
+                  Cancel
+                </Button>
+
+                {archiveModal.step === 1 && (
+                  <Button
+                    type="button"
+                    onClick={() => setArchiveModal((prev) => ({ ...prev, step: 2 }))}
+                    data-testid="template-archive-step1-confirm-button"
+                  >
+                    Continue
+                  </Button>
+                )}
+
+                {archiveModal.step === 2 && (
+                  <Button
+                    type="button"
+                    onClick={confirmArchiveTemplate}
+                    disabled={archiveInProgressId === archiveModal.templateId}
+                    data-testid="template-archive-step2-confirm-button"
+                  >
+                    {archiveInProgressId === archiveModal.templateId ? "Archiving..." : "Archive Template"}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -655,16 +781,13 @@ const TemplatesPage = ({ role }) => {
                                   ))}
                                 </select>
                                 <Input
-                                  value={(variable.options || []).join(", ")}
+                                  value={variable.options_text ?? (variable.options || []).join(", ")}
                                   onChange={(event) =>
                                     updateSection(section.id, (prev) => {
                                       const nextVariables = [...prev.variables];
                                       nextVariables[variableIndex] = {
                                         ...nextVariables[variableIndex],
-                                        options: event.target.value
-                                          .split(",")
-                                          .map((item) => item.trim())
-                                          .filter(Boolean),
+                                        options_text: event.target.value,
                                       };
                                       return { ...prev, variables: nextVariables };
                                     })
@@ -672,20 +795,42 @@ const TemplatesPage = ({ role }) => {
                                   disabled={!canManageTemplates}
                                   data-testid={`template-variable-options-${section.id}-${variableIndex}`}
                                 />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  onClick={() =>
-                                    updateSection(section.id, (prev) => ({
-                                      ...prev,
-                                      template_text: `${prev.template_text} {${variable.key}}`.trim(),
-                                    }))
-                                  }
-                                  disabled={!canManageTemplates || !variable.key}
-                                  data-testid={`template-variable-insert-${section.id}-${variableIndex}`}
-                                >
-                                  Insert
-                                </Button>
+                                <div className="flex gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      updateSection(section.id, (prev) => ({
+                                        ...prev,
+                                        template_text: `${prev.template_text} {${variable.key}}`.trim(),
+                                      }))
+                                    }
+                                    disabled={!canManageTemplates || !variable.key}
+                                    data-testid={`template-variable-insert-${section.id}-${variableIndex}`}
+                                  >
+                                    Insert
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={() =>
+                                      updateSection(section.id, (prev) => {
+                                        const variableToRemove = prev.variables[variableIndex];
+                                        const nextVariables = prev.variables.filter((_, index) => index !== variableIndex);
+
+                                        return {
+                                          ...prev,
+                                          variables: nextVariables,
+                                          template_text: removePlaceholderToken(prev.template_text, variableToRemove?.key || ""),
+                                        };
+                                      })
+                                    }
+                                    disabled={!canManageTemplates}
+                                    data-testid={`template-variable-delete-${section.id}-${variableIndex}`}
+                                  >
+                                    Delete
+                                  </Button>
+                                </div>
                               </div>
                             ))}
                         </div>
@@ -846,16 +991,13 @@ const TemplatesPage = ({ role }) => {
                                               ))}
                                             </select>
                                             <Input
-                                              value={(variable.options || []).join(", ")}
+                                              value={variable.options_text ?? (variable.options || []).join(", ")}
                                               onChange={(event) =>
                                                 updateSubsection(section.id, subsection.id, (prev) => {
                                                   const nextVariables = [...prev.variables];
                                                   nextVariables[variableIndex] = {
                                                     ...nextVariables[variableIndex],
-                                                    options: event.target.value
-                                                      .split(",")
-                                                      .map((item) => item.trim())
-                                                      .filter(Boolean),
+                                                    options_text: event.target.value,
                                                   };
                                                   return { ...prev, variables: nextVariables };
                                                 })
@@ -863,20 +1005,41 @@ const TemplatesPage = ({ role }) => {
                                               disabled={!canManageTemplates}
                                               data-testid={`template-subsection-variable-options-${section.id}-${subsection.id}-${variableIndex}`}
                                             />
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              onClick={() =>
-                                                updateSubsection(section.id, subsection.id, (prev) => ({
-                                                  ...prev,
-                                                  template_text: `${prev.template_text} {${variable.key}}`.trim(),
-                                                }))
-                                              }
-                                              disabled={!canManageTemplates || !variable.key}
-                                              data-testid={`template-subsection-variable-insert-${section.id}-${subsection.id}-${variableIndex}`}
-                                            >
-                                              Insert
-                                            </Button>
+                                            <div className="flex gap-1">
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={() =>
+                                                  updateSubsection(section.id, subsection.id, (prev) => ({
+                                                    ...prev,
+                                                    template_text: `${prev.template_text} {${variable.key}}`.trim(),
+                                                  }))
+                                                }
+                                                disabled={!canManageTemplates || !variable.key}
+                                                data-testid={`template-subsection-variable-insert-${section.id}-${subsection.id}-${variableIndex}`}
+                                              >
+                                                Insert
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="destructive"
+                                                onClick={() =>
+                                                  updateSubsection(section.id, subsection.id, (prev) => {
+                                                    const variableToRemove = prev.variables[variableIndex];
+                                                    const nextVariables = prev.variables.filter((_, index) => index !== variableIndex);
+                                                    return {
+                                                      ...prev,
+                                                      variables: nextVariables,
+                                                      template_text: removePlaceholderToken(prev.template_text, variableToRemove?.key || ""),
+                                                    };
+                                                  })
+                                                }
+                                                disabled={!canManageTemplates}
+                                                data-testid={`template-subsection-variable-delete-${section.id}-${subsection.id}-${variableIndex}`}
+                                              >
+                                                Delete
+                                              </Button>
+                                            </div>
                                           </div>
                                         ))}
                                     </div>
