@@ -65,6 +65,13 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Template Library now supports clone-from-existing workflow only (no scratch creation), template status management, section/subsection editing, variable type definition, and placeholder insertion into template text
 - Settings now includes editable role-permission matrix with persistence, plus user creation and role assignment
 
+### 2026-04-18 (Template Usability Upgrade)
+- Added first-view **All Templates** overview grid before editing workflow
+- Added collapsible section cards (collapsed by default) for cleaner navigation
+- Added section sequence controls (move up/down) with save persistence of order
+- Grouped variables under collapsible blocks (collapsed by default) at section and subsection levels
+- Improved visual hierarchy with distinct color zones for section, subsection, variables, and option groups
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
