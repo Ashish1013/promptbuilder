@@ -82,6 +82,12 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Added expandable/collapsible subsections inside each section card
 - Added **delete user** action in Settings to immediately revoke access and remove user account
 
+### 2026-04-18 (Bug-Fix Round)
+- Fixed Settings user delete flow by replacing fragile browser confirm with dedicated confirmation modal
+- Fixed template archive flow with robust in-app two-step confirmation modal
+- Fixed variable option input behavior to properly support comma-separated entries for select/multiselect
+- Added variable delete actions (section + subsection) that remove both variable config and placeholder token references from template text
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
