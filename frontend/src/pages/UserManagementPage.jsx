@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { createUser, fetchRolesMatrix, fetchUsers, updateRolesMatrix, updateUserRole } from "@/lib/api";
+import { createUser, deleteUser, fetchRolesMatrix, fetchUsers, updateRolesMatrix, updateUserRole } from "@/lib/api";
 
 const ROLE_OPTIONS = ["admin", "editor", "viewer"];
 
@@ -81,6 +81,26 @@ const UserManagementPage = ({ currentUser }) => {
       toast.error(error?.response?.data?.detail || "Unable to update role.");
     } finally {
       setSavingUserId("");
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!isAdmin) {
+      toast.error("Only admin can delete users.");
+      return;
+    }
+
+    const confirmDelete = window.confirm("Delete this user and remove access immediately?");
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      await deleteUser(userId);
+      setUsers((prev) => prev.filter((user) => user.id !== userId));
+      toast.success("User deleted.");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Unable to delete user.");
     }
   };
 
@@ -229,6 +249,14 @@ const UserManagementPage = ({ currentUser }) => {
                     </option>
                   ))}
                 </select>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => handleDeleteUser(user.id)}
+                  data-testid={`user-delete-button-${user.id}`}
+                >
+                  Delete
+                </Button>
               </div>
             </div>
           ))}

@@ -176,6 +176,7 @@ class PromptTemplate(BaseModel):
     sections: List[PromptSectionTemplate]
     source_template_id: str = ""
     created_by_username: str = ""
+    archived: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -827,7 +828,16 @@ async def get_activity_table(authorization: Optional[str] = Header(default=None)
 async def list_template_library(authorization: Optional[str] = Header(default=None)) -> List[PromptTemplate]:
     _ = await get_current_user_from_authorization(authorization)
     await ensure_prompt_templates_seeded()
-    template_docs = await db.prompt_templates.find({}, {"_id": 0}).sort("updated_at", -1).to_list(200)
+    template_docs = (
+        await db.prompt_templates.find({"archived": {"$ne": True}}, {"_id": 0}).sort("updated_at", -1).to_list(200)
+    )
+    return [PromptTemplate(**doc) for doc in template_docs]
+
+
+@api_router.get("/template-library/archived", response_model=List[PromptTemplate])
+async def list_archived_templates(authorization: Optional[str] = Header(default=None)) -> List[PromptTemplate]:
+    _ = await get_current_user_from_authorization(authorization)
+    template_docs = await db.prompt_templates.find({"archived": True}, {"_id": 0}).sort("updated_at", -1).to_list(200)
     return [PromptTemplate(**doc) for doc in template_docs]
 
 
@@ -835,7 +845,11 @@ async def list_template_library(authorization: Optional[str] = Header(default=No
 async def list_ready_templates(authorization: Optional[str] = Header(default=None)) -> List[PromptTemplate]:
     _ = await get_current_user_from_authorization(authorization)
     await ensure_prompt_templates_seeded()
-    template_docs = await db.prompt_templates.find({"status": "ready"}, {"_id": 0}).sort("updated_at", -1).to_list(200)
+    template_docs = (
+        await db.prompt_templates.find({"status": "ready", "archived": {"$ne": True}}, {"_id": 0})
+        .sort("updated_at", -1)
+        .to_list(200)
+    )
     return [PromptTemplate(**doc) for doc in template_docs]
 
 
@@ -858,6 +872,7 @@ async def clone_template_from_existing(
         sections=[PromptSectionTemplate(**section) for section in source_template.get("sections", [])],
         source_template_id=payload.source_template_id,
         created_by_username=current_user.username,
+        archived=False,
         created_at=now_iso,
         updated_at=now_iso,
     )
@@ -881,6 +896,34 @@ async def update_template_library_item(
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     result = await db.prompt_templates.update_one({"id": template_id}, {"$set": update_doc})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found.")
+
+    template_doc = await db.prompt_templates.find_one({"id": template_id}, {"_id": 0})
+    if not template_doc:
+        raise HTTPException(status_code=404, detail="Template not found.")
+
+    return PromptTemplate(**template_doc)
+
+
+@api_router.put("/template-library/{template_id}/archive", response_model=PromptTemplate)
+async def archive_template(
+    template_id: str,
+    authorization: Optional[str] = Header(default=None),
+) -> PromptTemplate:
+    current_user = await get_current_user_from_authorization(authorization)
+    await enforce_permission(current_user.role, "can_manage_templates")
+
+    result = await db.prompt_templates.update_one(
+        {"id": template_id},
+        {
+            "$set": {
+                "archived": True,
+                "status": "draft",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Template not found.")
 
@@ -943,6 +986,25 @@ async def update_user_role(
         raise HTTPException(status_code=404, detail="User not found.")
 
     return UserPublic(**user_doc)
+
+
+@api_router.delete("/users/{user_id}", response_model=MessageResponse)
+async def delete_user(user_id: str, authorization: Optional[str] = Header(default=None)) -> MessageResponse:
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin"])
+
+    user_doc = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    if user_doc.get("username") == current_user.username:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    return MessageResponse(message="User deleted successfully.")
 
 
 @api_router.get("/roles", response_model=RolesResponse)

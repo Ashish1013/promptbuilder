@@ -65,6 +65,11 @@ export const fetchUsers = async () => {
   return response.data;
 };
 
+export const deleteUser = async (userId) => {
+  const response = await apiClient.delete(`/users/${userId}`);
+  return response.data;
+};
+
 export const createUser = async (payload) => {
   const response = await apiClient.post("/users", payload);
   return response.data;
@@ -85,6 +90,11 @@ export const fetchTemplateLibrary = async () => {
   return response.data;
 };
 
+export const fetchArchivedTemplates = async () => {
+  const response = await apiClient.get("/template-library/archived");
+  return response.data;
+};
+
 export const fetchReadyTemplates = async () => {
   const response = await apiClient.get("/template-library/ready");
   return response.data;
@@ -97,6 +107,11 @@ export const cloneTemplateLibraryItem = async (payload) => {
 
 export const updateTemplateLibraryItem = async (templateId, payload) => {
   const response = await apiClient.put(`/template-library/${templateId}`, payload);
+  return response.data;
+};
+
+export const archiveTemplateLibraryItem = async (templateId) => {
+  const response = await apiClient.put(`/template-library/${templateId}/archive`);
   return response.data;
 };
 
