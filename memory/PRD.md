@@ -101,6 +101,13 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Validated Builder home flow: existing prompts table (team-wide), `Create New Prompt` modal with prompt name + READY template selection, and successful workspace launch
 - Verified via automated test report `/app/test_reports/iteration_10.json` (backend + frontend pass)
 
+### 2026-04-18 (Builder Middle-Pane UX Refinement)
+- Fixed confusing extra variable fields by rendering variable inputs from actual placeholders present in raw section/subsection template text
+- Improved middle-pane readability with clearer variable cards, better spacing, and cleaner label hierarchy
+- Increased variable input area sizes for paragraph-style content (`text` now large resizable textarea, `textarea` even taller), while preserving select/multiselect behavior
+- Added resilient definition matching for display metadata/input types even when key casing differs
+- Verified with automated frontend regression report `/app/test_reports/iteration_11.json` (100% pass)
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
