@@ -14,6 +14,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import {
   createPromptDraft,
   fetchPromptDraft,
+  fetchPromptDrafts,
   fetchReadyTemplates,
   fetchTemplateLibrary,
   updatePromptDraft,
@@ -41,9 +42,10 @@ const BuilderPage = ({ currentUser }) => {
   const [activeVariable, setActiveVariable] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [readyTemplates, setReadyTemplates] = useState([]);
-  const [allTemplates, setAllTemplates] = useState([]);
   const [setupTemplateId, setSetupTemplateId] = useState("");
   const [setupPromptName, setSetupPromptName] = useState("");
+  const [showCreatePromptModal, setShowCreatePromptModal] = useState(false);
+  const [promptRows, setPromptRows] = useState([]);
   const [isBuilderInitialized, setIsBuilderInitialized] = useState(false);
   const [promptEditorText, setPromptEditorText] = useState("");
   const [isPromptManuallyEdited, setIsPromptManuallyEdited] = useState(false);
@@ -64,9 +66,13 @@ const BuilderPage = ({ currentUser }) => {
   const loadBuilderState = useCallback(async () => {
     setLoading(true);
     try {
-      const [templatesResponse, readyTemplatesResponse] = await Promise.all([fetchTemplateLibrary(), fetchReadyTemplates()]);
-      setAllTemplates(templatesResponse);
+      const [templatesResponse, readyTemplatesResponse, promptDraftsResponse] = await Promise.all([
+        fetchTemplateLibrary(),
+        fetchReadyTemplates(),
+        fetchPromptDrafts(),
+      ]);
       setReadyTemplates(readyTemplatesResponse);
+      setPromptRows(promptDraftsResponse);
 
       const params = new URLSearchParams(location.search);
       const draftIdFromUrl = params.get("draftId");
@@ -74,6 +80,9 @@ const BuilderPage = ({ currentUser }) => {
       if (draftIdFromUrl) {
         const draft = await fetchPromptDraft(draftIdFromUrl);
         const sourceTemplate = templatesResponse.find((template) => template.id === draft.template_id);
+        const hydratedSections = sourceTemplate
+          ? hydrateDraftSectionsFromTemplates(draft.sections, sourceTemplate.sections)
+          : hydrateDraftSectionsFromTemplates(draft.sections, []);
 
         setDraftId(draft.id);
         setMetadata({
@@ -83,13 +92,9 @@ const BuilderPage = ({ currentUser }) => {
           template_id: draft.template_id,
           template_name: draft.template_name,
         });
-        setSections(
-          sourceTemplate
-            ? hydrateDraftSectionsFromTemplates(draft.sections, sourceTemplate.sections)
-            : hydrateDraftSectionsFromTemplates(draft.sections, []),
-        );
-        setPromptEditorText(draft.compiled_prompt || "");
-        setIsPromptManuallyEdited(Boolean(draft.compiled_prompt));
+        setSections(hydratedSections);
+        setPromptEditorText(draft.compiled_prompt || compilePromptOutput(hydratedSections).compiledPrompt);
+        setIsPromptManuallyEdited(false);
         setIsBuilderInitialized(true);
         setSetupTemplateId(draft.template_id || "");
         setSetupPromptName(draft.title || "");
@@ -175,6 +180,7 @@ const BuilderPage = ({ currentUser }) => {
     setIsBuilderInitialized(true);
     setPromptEditorText("");
     setIsPromptManuallyEdited(false);
+    setShowCreatePromptModal(false);
   };
 
   const copyText = async (text) => {
@@ -274,50 +280,118 @@ const BuilderPage = ({ currentUser }) => {
 
   if (!isBuilderInitialized) {
     return (
-      <div className="pane-scroll h-[calc(100vh-84px)] overflow-y-auto p-6 md:p-8 lg:p-10" data-testid="builder-setup-page-container">
-        <Card className="mx-auto max-w-2xl border-slate-200 shadow-sm" data-testid="builder-setup-card">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold text-slate-900" data-testid="builder-setup-title">
-              Start Building a Prompt
+      <div className="pane-scroll h-[calc(100vh-84px)] overflow-y-auto p-6 md:p-8 lg:p-10" data-testid="builder-home-page-container">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3" data-testid="builder-home-header">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Builder Home</p>
+            <h2 className="mt-1 text-3xl font-bold text-slate-900" data-testid="builder-home-title">
+              Existing Prompts
+            </h2>
+          </div>
+          <Button type="button" onClick={() => setShowCreatePromptModal(true)} data-testid="builder-home-create-button">
+            Create New Prompt
+          </Button>
+        </div>
+
+        <Card className="border-slate-200 shadow-sm" data-testid="builder-home-table-card">
+          <CardHeader className="border-b border-slate-100 bg-slate-50/70 py-4">
+            <CardTitle className="text-lg font-bold text-slate-900" data-testid="builder-home-table-title">
+              Prompts Created by Team
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" data-testid="builder-setup-template-label">
-                Step 1: Select READY Template
-              </label>
-              <select
-                value={setupTemplateId}
-                onChange={(event) => setSetupTemplateId(event.target.value)}
-                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-                data-testid="builder-setup-template-select"
-              >
-                <option value="">Select template</option>
-                {readyTemplates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
+          <CardContent className="overflow-x-auto p-0">
+            <table className="w-full border-collapse text-sm" data-testid="builder-home-table">
+              <thead>
+                <tr className="border-b border-slate-200 bg-white text-xs uppercase tracking-[0.12em] text-slate-500">
+                  <th className="px-3 py-3 text-left">Prompt</th>
+                  <th className="px-3 py-3 text-left">Template</th>
+                  <th className="px-3 py-3 text-left">Created By</th>
+                  <th className="px-3 py-3 text-left">Updated</th>
+                  <th className="px-3 py-3 text-left">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {promptRows.map((row) => (
+                  <tr key={row.id} className="border-b border-slate-100" data-testid={`builder-home-row-${row.id}`}>
+                    <td className="px-3 py-3 text-slate-900">{row.title || "Untitled Prompt"}</td>
+                    <td className="px-3 py-3 text-slate-700">{row.template_name || "-"}</td>
+                    <td className="px-3 py-3 text-slate-700">{row.created_by_username || "-"}</td>
+                    <td className="px-3 py-3 text-slate-700">{new Date(row.updated_at).toLocaleString()}</td>
+                    <td className="px-3 py-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/builder?draftId=${row.id}`)}
+                        data-testid={`builder-home-open-${row.id}`}
+                      >
+                        Open
+                      </Button>
+                    </td>
+                  </tr>
                 ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" data-testid="builder-setup-name-label">
-                Step 2: Name Your Prompt
-              </label>
-              <Input
-                value={setupPromptName}
-                onChange={(event) => setSetupPromptName(event.target.value)}
-                placeholder="e.g. Warehouse Safety Escalation Prompt"
-                data-testid="builder-setup-name-input"
-              />
-            </div>
-
-            <Button type="button" onClick={handleSetupStart} className="w-full" data-testid="builder-setup-start-button">
-              Start Building
-            </Button>
+              </tbody>
+            </table>
           </CardContent>
         </Card>
+
+        {showCreatePromptModal && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4" data-testid="builder-create-modal-overlay">
+            <Card className="w-full max-w-xl border-slate-200" data-testid="builder-create-modal-card">
+              <CardHeader>
+                <CardTitle className="text-xl font-bold text-slate-900" data-testid="builder-create-modal-title">
+                  Create New Prompt
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" data-testid="builder-setup-template-label">
+                    Select READY Template
+                  </label>
+                  <select
+                    value={setupTemplateId}
+                    onChange={(event) => setSetupTemplateId(event.target.value)}
+                    className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                    data-testid="builder-setup-template-select"
+                  >
+                    <option value="">Select template</option>
+                    {readyTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" data-testid="builder-setup-name-label">
+                    Prompt Name
+                  </label>
+                  <Input
+                    value={setupPromptName}
+                    onChange={(event) => setSetupPromptName(event.target.value)}
+                    placeholder="e.g. Warehouse Safety Escalation Prompt"
+                    data-testid="builder-setup-name-input"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowCreatePromptModal(false)}
+                    data-testid="builder-create-modal-cancel-button"
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="button" onClick={handleSetupStart} data-testid="builder-setup-start-button">
+                    Start Building
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     );
   }

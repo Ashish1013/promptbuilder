@@ -11,7 +11,7 @@ import { extractVariableKeysFromText, syncVariableValuesFromText } from "@/lib/p
 const mergeVariableKeys = (text, variableValues = {}, variableDefinitions = []) => {
   const textKeys = extractVariableKeysFromText(text);
   const definitionKeys = variableDefinitions.map((definition) => definition.key);
-  const keys = [...Object.keys(variableValues), ...textKeys, ...definitionKeys];
+  const keys = [...definitionKeys, ...textKeys];
   return [...new Set(keys)];
 };
 
@@ -153,8 +153,13 @@ export const SectionCard = ({
                   className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
                   data-testid={`section-variable-label-${section.id}-${variableKey}`}
                 >
-                  {sectionDefinitionMap[variableKey]?.label || variableKey}
+                  {variableKey}
                 </label>
+                {sectionDefinitionMap[variableKey]?.label && sectionDefinitionMap[variableKey]?.label !== variableKey && (
+                  <p className="text-xs text-slate-500" data-testid={`section-variable-help-${section.id}-${variableKey}`}>
+                    {sectionDefinitionMap[variableKey]?.label}
+                  </p>
+                )}
                 <p className="text-[11px] text-slate-500" data-testid={`section-variable-meta-${section.id}-${variableKey}`}>
                   {sectionDefinitionMap[variableKey]?.required ? "Required" : "Optional"}
                 </p>
@@ -350,8 +355,17 @@ export const SectionCard = ({
                                 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500"
                                 data-testid={`subsection-variable-label-${section.id}-${subsection.id}-${variableKey}`}
                               >
-                                {subsectionDefinitionMap[variableKey]?.label || variableKey}
+                                {variableKey}
                               </label>
+                              {subsectionDefinitionMap[variableKey]?.label &&
+                                subsectionDefinitionMap[variableKey]?.label !== variableKey && (
+                                  <p
+                                    className="text-xs text-slate-500"
+                                    data-testid={`subsection-variable-help-${section.id}-${subsection.id}-${variableKey}`}
+                                  >
+                                    {subsectionDefinitionMap[variableKey]?.label}
+                                  </p>
+                                )}
                               {subsectionDefinitionMap[variableKey]?.input_type === "textarea" && (
                                 <Textarea
                                   id={`${subsection.id}-${variableKey}`}

@@ -676,7 +676,7 @@ async def ensure_prompt_templates_seeded() -> None:
 
 
 def extract_placeholders(template_text: str) -> List[str]:
-    keys = re.findall(r"\{\s*([a-zA-Z0-9_.-]+)\s*\}", template_text)
+    keys = re.findall(r"\{\s*([^{}]+?)\s*\}", template_text)
     seen = set()
     ordered = []
     for key in keys:
@@ -686,13 +686,26 @@ def extract_placeholders(template_text: str) -> List[str]:
     return ordered
 
 
+def resolve_variable_value(variable_values: Dict[str, str], key: str) -> str:
+    exact_value = variable_values.get(key, "")
+    if exact_value and exact_value.strip():
+        return exact_value.strip()
+
+    normalized_target = key.strip().lower()
+    for existing_key, existing_value in variable_values.items():
+        if existing_key.strip().lower() == normalized_target and existing_value and existing_value.strip():
+            return existing_value.strip()
+
+    return ""
+
+
 def fill_template(template_text: str, variable_values: Dict[str, str]) -> str:
     def replace(match: re.Match) -> str:
         key = match.group(1).strip()
-        value = variable_values.get(key, "")
-        return value.strip() if value and value.strip() else f"{{{key}}}"
+        value = resolve_variable_value(variable_values, key)
+        return value if value else f"{{{key}}}"
 
-    return re.sub(r"\{\s*([a-zA-Z0-9_.-]+)\s*\}", replace, template_text)
+    return re.sub(r"\{\s*([^{}]+?)\s*\}", replace, template_text)
 
 
 def compile_sections(sections: List[PromptSectionState]) -> CompilePromptResponse:

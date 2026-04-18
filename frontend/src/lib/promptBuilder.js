@@ -1,4 +1,23 @@
-const VARIABLE_REGEX = /\{\s*([a-zA-Z0-9_.-]+)\s*\}/g;
+const VARIABLE_REGEX = /\{\s*([^{}]+?)\s*\}/g;
+
+const normalizeVariableKey = (key = "") => key.trim().toLowerCase();
+
+const resolveVariableValue = (values = {}, key = "") => {
+  const exactValue = values[key];
+  if (typeof exactValue === "string" && exactValue.trim()) {
+    return exactValue.trim();
+  }
+
+  const targetKey = normalizeVariableKey(key);
+  const fallbackEntry = Object.entries(values).find(
+    ([candidateKey, candidateValue]) =>
+      normalizeVariableKey(candidateKey) === targetKey &&
+      typeof candidateValue === "string" &&
+      candidateValue.trim(),
+  );
+
+  return fallbackEntry ? fallbackEntry[1].trim() : "";
+};
 
 export const extractVariableKeysFromText = (rawText = "") => {
   const keys = [];
@@ -21,14 +40,21 @@ export const extractVariableKeysFromText = (rawText = "") => {
 const mergeVariableDefaults = (definitions = [], rawText = "") => {
   const textKeys = extractVariableKeysFromText(rawText);
   const values = {};
+  const normalizedKeys = new Set();
 
   definitions.forEach((definition) => {
-    values[definition.key] = definition.default_value || "";
+    const normalizedKey = normalizeVariableKey(definition.key);
+    if (!normalizedKeys.has(normalizedKey)) {
+      values[definition.key] = definition.default_value || "";
+      normalizedKeys.add(normalizedKey);
+    }
   });
 
   textKeys.forEach((key) => {
-    if (!(key in values)) {
+    const normalizedKey = normalizeVariableKey(key);
+    if (!normalizedKeys.has(normalizedKey)) {
       values[key] = "";
+      normalizedKeys.add(normalizedKey);
     }
   });
 
@@ -38,9 +64,14 @@ const mergeVariableDefaults = (definitions = [], rawText = "") => {
 export const syncVariableValuesFromText = (rawText = "", variableValues = {}) => {
   const nextValues = { ...variableValues };
   const textKeys = extractVariableKeysFromText(rawText);
+  const existingKeys = Object.keys(nextValues);
 
   textKeys.forEach((key) => {
-    if (!(key in nextValues)) {
+    const hasCaseInsensitiveMatch = existingKeys.some(
+      (existingKey) => normalizeVariableKey(existingKey) === normalizeVariableKey(key),
+    );
+
+    if (!hasCaseInsensitiveMatch) {
       nextValues[key] = "";
     }
   });
@@ -69,8 +100,8 @@ export const createBuilderSectionsFromTemplates = (templates = []) =>
 export const fillTemplate = (rawText = "", values = {}) =>
   rawText.replace(VARIABLE_REGEX, (_, key) => {
     const trimmedKey = key.trim();
-    const value = values[trimmedKey];
-    return value && value.trim() ? value : `{${trimmedKey}}`;
+    const value = resolveVariableValue(values, trimmedKey);
+    return value ? value : `{${trimmedKey}}`;
   });
 
 export const compilePromptOutput = (sections = []) => {
