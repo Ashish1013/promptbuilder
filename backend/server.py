@@ -94,6 +94,8 @@ class PromptDraftPayload(BaseModel):
     title: str
     customer_name: str = ""
     use_case: str = ""
+    template_id: str = ""
+    template_name: str = ""
     sections: List[PromptSectionState]
     compiled_prompt: str = ""
 
@@ -167,7 +169,46 @@ class UserActivityResponse(BaseModel):
     activities: List[UserActivityItem]
 
 
-ROLE_PERMISSIONS = {
+class PromptTemplate(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    status: Literal["draft", "ready"] = "draft"
+    sections: List[PromptSectionTemplate]
+    source_template_id: str = ""
+    created_by_username: str = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class PromptTemplateCloneRequest(BaseModel):
+    source_template_id: str
+    new_template_name: str
+
+
+class PromptTemplateUpdateRequest(BaseModel):
+    name: str
+    status: Literal["draft", "ready"]
+    sections: List[PromptSectionTemplate]
+
+
+class RolePermissionsUpdateRequest(BaseModel):
+    roles: Dict[str, Dict[str, bool]]
+
+
+class ActivityTableItem(BaseModel):
+    draft_id: str
+    prompt_name: str
+    template_name: str
+    created_by_username: str
+    updated_by_username: str
+    updated_at: str
+
+
+class ActivityTableResponse(BaseModel):
+    rows: List[ActivityTableItem]
+
+
+DEFAULT_ROLE_PERMISSIONS = {
     "admin": {
         "can_manage_templates": True,
         "can_create_prompts": True,
@@ -191,10 +232,12 @@ ROLE_PERMISSIONS = {
     },
 }
 
+VALID_ROLES = list(DEFAULT_ROLE_PERMISSIONS.keys())
+
 
 def normalize_role(role_value: Optional[str]) -> str:
     role = (role_value or "viewer").strip().lower()
-    return role if role in ROLE_PERMISSIONS else "viewer"
+    return role if role in VALID_ROLES else "viewer"
 
 
 def enforce_role(user_role: str, allowed_roles: List[str]) -> None:
@@ -260,6 +303,27 @@ async def get_current_user_from_authorization(authorization: Optional[str]) -> U
         raise HTTPException(status_code=401, detail="User not found.")
 
     return UserPublic(**user_doc)
+
+
+async def ensure_role_permissions_seeded() -> None:
+    existing = await db.role_permissions.find_one({"id": "default"}, {"_id": 0})
+    if existing:
+        return
+
+    await db.role_permissions.insert_one({"id": "default", "roles": DEFAULT_ROLE_PERMISSIONS})
+
+
+async def get_role_permissions_matrix() -> Dict[str, Dict[str, bool]]:
+    await ensure_role_permissions_seeded()
+    doc = await db.role_permissions.find_one({"id": "default"}, {"_id": 0, "roles": 1})
+    return doc.get("roles", DEFAULT_ROLE_PERMISSIONS) if doc else DEFAULT_ROLE_PERMISSIONS
+
+
+async def enforce_permission(user_role: str, permission_key: str) -> None:
+    permissions_matrix = await get_role_permissions_matrix()
+    role_permissions = permissions_matrix.get(user_role, {})
+    if not role_permissions.get(permission_key, False):
+        raise HTTPException(status_code=403, detail="You do not have permission for this action.")
 
 
 def get_default_templates() -> List[PromptSectionTemplate]:
@@ -594,6 +658,22 @@ async def ensure_default_templates_seeded() -> None:
         )
 
 
+async def ensure_prompt_templates_seeded() -> None:
+    templates_count = await db.prompt_templates.count_documents({})
+    if templates_count > 0:
+        return
+
+    default_template = PromptTemplate(
+        id="default_voice_agent_template",
+        name="Default Voice Agent Template",
+        status="ready",
+        sections=get_default_templates(),
+        source_template_id="",
+        created_by_username="system",
+    )
+    await db.prompt_templates.insert_one(default_template.model_dump())
+
+
 def extract_placeholders(template_text: str) -> List[str]:
     keys = re.findall(r"\{\s*([a-zA-Z0-9_.-]+)\s*\}", template_text)
     seen = set()
@@ -708,6 +788,109 @@ async def get_my_activity(authorization: Optional[str] = Header(default=None)) -
     return UserActivityResponse(username=current_user.username, activities=activities)
 
 
+@api_router.get("/activity", response_model=ActivityTableResponse)
+async def get_activity_table(authorization: Optional[str] = Header(default=None)) -> ActivityTableResponse:
+    _ = await get_current_user_from_authorization(authorization)
+    draft_docs = (
+        await db.prompt_drafts.find(
+            {},
+            {
+                "_id": 0,
+                "id": 1,
+                "title": 1,
+                "template_name": 1,
+                "created_by_username": 1,
+                "updated_by_username": 1,
+                "updated_at": 1,
+            },
+        )
+        .sort("updated_at", -1)
+        .to_list(400)
+    )
+
+    rows = [
+        ActivityTableItem(
+            draft_id=draft.get("id", ""),
+            prompt_name=draft.get("title", "Untitled Prompt"),
+            template_name=draft.get("template_name", "Unknown Template"),
+            created_by_username=draft.get("created_by_username", ""),
+            updated_by_username=draft.get("updated_by_username", ""),
+            updated_at=draft.get("updated_at", datetime.now(timezone.utc).isoformat()),
+        )
+        for draft in draft_docs
+    ]
+
+    return ActivityTableResponse(rows=rows)
+
+
+@api_router.get("/template-library", response_model=List[PromptTemplate])
+async def list_template_library(authorization: Optional[str] = Header(default=None)) -> List[PromptTemplate]:
+    _ = await get_current_user_from_authorization(authorization)
+    await ensure_prompt_templates_seeded()
+    template_docs = await db.prompt_templates.find({}, {"_id": 0}).sort("updated_at", -1).to_list(200)
+    return [PromptTemplate(**doc) for doc in template_docs]
+
+
+@api_router.get("/template-library/ready", response_model=List[PromptTemplate])
+async def list_ready_templates(authorization: Optional[str] = Header(default=None)) -> List[PromptTemplate]:
+    _ = await get_current_user_from_authorization(authorization)
+    await ensure_prompt_templates_seeded()
+    template_docs = await db.prompt_templates.find({"status": "ready"}, {"_id": 0}).sort("updated_at", -1).to_list(200)
+    return [PromptTemplate(**doc) for doc in template_docs]
+
+
+@api_router.post("/template-library/clone", response_model=PromptTemplate)
+async def clone_template_from_existing(
+    payload: PromptTemplateCloneRequest,
+    authorization: Optional[str] = Header(default=None),
+) -> PromptTemplate:
+    current_user = await get_current_user_from_authorization(authorization)
+    await enforce_permission(current_user.role, "can_manage_templates")
+
+    source_template = await db.prompt_templates.find_one({"id": payload.source_template_id}, {"_id": 0})
+    if not source_template:
+        raise HTTPException(status_code=404, detail="Source template not found.")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    new_template = PromptTemplate(
+        name=payload.new_template_name.strip(),
+        status="draft",
+        sections=[PromptSectionTemplate(**section) for section in source_template.get("sections", [])],
+        source_template_id=payload.source_template_id,
+        created_by_username=current_user.username,
+        created_at=now_iso,
+        updated_at=now_iso,
+    )
+    await db.prompt_templates.insert_one(new_template.model_dump())
+    return new_template
+
+
+@api_router.put("/template-library/{template_id}", response_model=PromptTemplate)
+async def update_template_library_item(
+    template_id: str,
+    payload: PromptTemplateUpdateRequest,
+    authorization: Optional[str] = Header(default=None),
+) -> PromptTemplate:
+    current_user = await get_current_user_from_authorization(authorization)
+    await enforce_permission(current_user.role, "can_manage_templates")
+
+    update_doc = {
+        "name": payload.name.strip(),
+        "status": payload.status,
+        "sections": [section.model_dump() for section in payload.sections],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = await db.prompt_templates.update_one({"id": template_id}, {"$set": update_doc})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found.")
+
+    template_doc = await db.prompt_templates.find_one({"id": template_id}, {"_id": 0})
+    if not template_doc:
+        raise HTTPException(status_code=404, detail="Template not found.")
+
+    return PromptTemplate(**template_doc)
+
+
 @api_router.get("/users", response_model=List[UserPublic])
 async def list_users(authorization: Optional[str] = Header(default=None)) -> List[UserPublic]:
     await ensure_default_admin_user()
@@ -765,7 +948,28 @@ async def update_user_role(
 @api_router.get("/roles", response_model=RolesResponse)
 async def get_roles_matrix(authorization: Optional[str] = Header(default=None)) -> RolesResponse:
     _ = await get_current_user_from_authorization(authorization)
-    return RolesResponse(roles=ROLE_PERMISSIONS)
+    permissions = await get_role_permissions_matrix()
+    return RolesResponse(roles=permissions)
+
+
+@api_router.put("/roles", response_model=RolesResponse)
+async def update_roles_matrix(
+    payload: RolePermissionsUpdateRequest,
+    authorization: Optional[str] = Header(default=None),
+) -> RolesResponse:
+    current_user = await get_current_user_from_authorization(authorization)
+    enforce_role(current_user.role, ["admin"])
+
+    for role in VALID_ROLES:
+        if role not in payload.roles:
+            raise HTTPException(status_code=400, detail=f"Missing role: {role}")
+
+    await db.role_permissions.update_one(
+        {"id": "default"},
+        {"$set": {"roles": payload.roles}},
+        upsert=True,
+    )
+    return RolesResponse(roles=payload.roles)
 
 
 @api_router.get("/templates", response_model=List[PromptSectionTemplate])
@@ -783,7 +987,7 @@ async def create_template(
     authorization: Optional[str] = Header(default=None),
 ) -> PromptSectionTemplate:
     current_user = await get_current_user_from_authorization(authorization)
-    enforce_role(current_user.role, ["admin"])
+    await enforce_permission(current_user.role, "can_manage_templates")
 
     template = PromptSectionTemplate(id=str(uuid.uuid4()), **payload.model_dump())
     await db.template_sections.insert_one(template.model_dump())
@@ -797,7 +1001,7 @@ async def update_template(
     authorization: Optional[str] = Header(default=None),
 ) -> PromptSectionTemplate:
     current_user = await get_current_user_from_authorization(authorization)
-    enforce_role(current_user.role, ["admin"])
+    await enforce_permission(current_user.role, "can_manage_templates")
 
     update_doc = payload.model_dump()
     update_doc["id"] = section_id
@@ -835,7 +1039,7 @@ async def create_prompt_draft(
     authorization: Optional[str] = Header(default=None),
 ) -> PromptDraft:
     current_user = await get_current_user_from_authorization(authorization)
-    enforce_role(current_user.role, ["admin", "editor"])
+    await enforce_permission(current_user.role, "can_create_prompts")
 
     compile_result = compile_sections(payload.sections)
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -861,7 +1065,7 @@ async def update_prompt_draft(
     authorization: Optional[str] = Header(default=None),
 ) -> PromptDraft:
     current_user = await get_current_user_from_authorization(authorization)
-    enforce_role(current_user.role, ["admin", "editor"])
+    await enforce_permission(current_user.role, "can_update_prompts")
 
     compile_result = compile_sections(payload.sections)
     updated_doc = payload.model_dump()
@@ -887,7 +1091,7 @@ async def delete_prompt_draft(
     authorization: Optional[str] = Header(default=None),
 ) -> MessageResponse:
     current_user = await get_current_user_from_authorization(authorization)
-    enforce_role(current_user.role, ["admin", "editor"])
+    await enforce_permission(current_user.role, "can_delete_prompts")
 
     result = await db.prompt_drafts.delete_one({"id": draft_id})
     if result.deleted_count == 0:
@@ -946,7 +1150,9 @@ logger = logging.getLogger(__name__)
 @app.on_event("startup")
 async def startup_seed_data() -> None:
     await ensure_default_admin_user()
+    await ensure_role_permissions_seeded()
     await ensure_default_templates_seeded()
+    await ensure_prompt_templates_seeded()
 
 
 @app.on_event("shutdown")

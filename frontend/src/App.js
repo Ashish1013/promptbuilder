@@ -12,7 +12,6 @@ import {
 } from "@/lib/api";
 import ActivityPage from "@/pages/ActivityPage";
 import BuilderPage from "@/pages/BuilderPage";
-import DraftsPage from "@/pages/DraftsPage";
 import LoginPage from "@/pages/LoginPage";
 import TemplatesPage from "@/pages/TemplatesPage";
 import UserManagementPage from "@/pages/UserManagementPage";
@@ -26,8 +25,7 @@ const ProtectedApp = ({ currentUser, onLogout }) => {
           <Route path="/activity" element={<ActivityPage currentUser={currentUser} />} />
           <Route path="/builder" element={<BuilderPage currentUser={currentUser} />} />
           <Route path="/templates" element={<TemplatesPage role={currentUser.role} />} />
-          <Route path="/drafts" element={<DraftsPage role={currentUser.role} />} />
-          <Route path="/users" element={<UserManagementPage currentUser={currentUser} />} />
+          <Route path="/settings" element={<UserManagementPage currentUser={currentUser} />} />
           <Route path="*" element={<Navigate to="/activity" replace />} />
         </Routes>
       </AppShell>

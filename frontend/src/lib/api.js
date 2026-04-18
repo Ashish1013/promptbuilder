@@ -55,6 +55,11 @@ export const fetchMyActivity = async () => {
   return response.data;
 };
 
+export const fetchActivityTable = async () => {
+  const response = await apiClient.get("/activity");
+  return response.data;
+};
+
 export const fetchUsers = async () => {
   const response = await apiClient.get("/users");
   return response.data;
@@ -67,6 +72,31 @@ export const createUser = async (payload) => {
 
 export const updateUserRole = async (userId, payload) => {
   const response = await apiClient.put(`/users/${userId}/role`, payload);
+  return response.data;
+};
+
+export const updateRolesMatrix = async (payload) => {
+  const response = await apiClient.put("/roles", payload);
+  return response.data.roles;
+};
+
+export const fetchTemplateLibrary = async () => {
+  const response = await apiClient.get("/template-library");
+  return response.data;
+};
+
+export const fetchReadyTemplates = async () => {
+  const response = await apiClient.get("/template-library/ready");
+  return response.data;
+};
+
+export const cloneTemplateLibraryItem = async (payload) => {
+  const response = await apiClient.post("/template-library/clone", payload);
+  return response.data;
+};
+
+export const updateTemplateLibraryItem = async (templateId, payload) => {
+  const response = await apiClient.put(`/template-library/${templateId}`, payload);
   return response.data;
 };
 

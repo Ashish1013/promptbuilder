@@ -6,12 +6,11 @@ const NAV_ITEMS = [
   { label: "Activity", path: "/activity", testId: "nav-activity-link" },
   { label: "Builder", path: "/builder", testId: "nav-builder-link" },
   { label: "Template Library", path: "/templates", testId: "nav-templates-link" },
-  { label: "Drafts", path: "/drafts", testId: "nav-drafts-link" },
-  { label: "Team Roles", path: "/users", testId: "nav-users-link" },
+  { label: "Settings", path: "/settings", testId: "nav-settings-link" },
 ];
 
 export const AppShell = ({ children, currentUser, onLogout }) => {
-  const visibleNavItems = NAV_ITEMS.filter((item) => item.path !== "/users" || currentUser?.role === "admin");
+  const visibleNavItems = NAV_ITEMS;
 
   return (
     <div className="min-h-screen">

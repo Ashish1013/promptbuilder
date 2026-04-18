@@ -4,10 +4,10 @@ import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetchMyActivity } from "@/lib/api";
+import { fetchActivityTable } from "@/lib/api";
 
 const ActivityPage = ({ currentUser }) => {
-  const [activities, setActivities] = useState([]);
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -15,10 +15,10 @@ const ActivityPage = ({ currentUser }) => {
     const loadActivity = async () => {
       setLoading(true);
       try {
-        const response = await fetchMyActivity();
-        setActivities(response.activities || []);
+        const response = await fetchActivityTable();
+        setRows(response.rows || []);
       } catch (error) {
-        toast.error(error?.response?.data?.detail || "Unable to load your activity.");
+        toast.error(error?.response?.data?.detail || "Unable to load activity table.");
       } finally {
         setLoading(false);
       }
@@ -43,10 +43,10 @@ const ActivityPage = ({ currentUser }) => {
             Welcome Back
           </p>
           <h2 className="mt-1 text-3xl font-bold text-slate-900" data-testid="activity-title">
-            {currentUser?.full_name || currentUser?.username} Activity
+            Prompt Activity
           </h2>
           <p className="mt-2 text-sm text-slate-600" data-testid="activity-description">
-            Start from here, then move to prompt building.
+            Compact view of all prompts created through the builder.
           </p>
         </div>
 
@@ -57,57 +57,73 @@ const ActivityPage = ({ currentUser }) => {
 
       <div className="mb-5 flex flex-wrap items-center gap-2" data-testid="activity-stats-block">
         <Badge className="bg-indigo-100 text-indigo-700" data-testid="activity-total-badge">
-          {activities.length} recent items
+          {rows.length} prompts
         </Badge>
         <Badge className="bg-slate-100 text-slate-700" data-testid="activity-role-badge">
-          Role: {currentUser?.role}
+          Viewer: {currentUser?.username}
         </Badge>
       </div>
 
-      {activities.length === 0 && (
+      {rows.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center" data-testid="activity-empty-state">
-          <p className="text-base font-semibold text-slate-800">No activity yet.</p>
-          <p className="mt-2 text-sm text-slate-600">Create your first prompt draft to start tracking activity.</p>
+          <p className="text-base font-semibold text-slate-800">No prompts yet.</p>
+          <p className="mt-2 text-sm text-slate-600">Create your first prompt from Builder.</p>
         </div>
       )}
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" data-testid="activity-card-grid">
-        {activities.map((item) => (
-          <Card key={item.draft_id} className="border-slate-200 shadow-sm" data-testid={`activity-card-${item.draft_id}`}>
-            <CardHeader className="border-b border-slate-100 bg-slate-50/70 pb-4">
-              <CardTitle className="text-lg font-bold text-slate-900" data-testid={`activity-draft-title-${item.draft_id}`}>
-                {item.draft_title || "Untitled Prompt"}
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent className="space-y-3 p-5">
-              <div data-testid={`activity-customer-${item.draft_id}`}>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Customer</p>
-                <p className="text-sm font-medium text-slate-900">{item.customer_name || "Not specified"}</p>
-              </div>
-
-              <div data-testid={`activity-updated-${item.draft_id}`}>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Last Updated</p>
-                <p className="text-sm text-slate-700">{new Date(item.updated_at).toLocaleString()}</p>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Badge className="bg-slate-100 text-slate-700" data-testid={`activity-role-${item.draft_id}`}>
-                  Updated by {item.updated_by_role}
-                </Badge>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate(`/builder?draftId=${item.draft_id}`)}
-                  data-testid={`activity-open-draft-${item.draft_id}`}
-                >
-                  Open
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card className="border-slate-200 shadow-sm" data-testid="activity-table-card">
+        <CardHeader className="border-b border-slate-100 bg-slate-50/70 py-4">
+          <CardTitle className="text-lg font-bold text-slate-900" data-testid="activity-table-title">
+            Prompt Builder Activity Table
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full border-collapse text-sm" data-testid="activity-table">
+            <thead>
+              <tr className="border-b border-slate-200 bg-white text-xs uppercase tracking-[0.12em] text-slate-500">
+                <th className="px-3 py-3 text-left">Prompt</th>
+                <th className="px-3 py-3 text-left">Template</th>
+                <th className="px-3 py-3 text-left">Created By</th>
+                <th className="px-3 py-3 text-left">Updated By</th>
+                <th className="px-3 py-3 text-left">Updated At</th>
+                <th className="px-3 py-3 text-left">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.draft_id} className="border-b border-slate-100" data-testid={`activity-table-row-${row.draft_id}`}>
+                  <td className="px-3 py-3 font-medium text-slate-900" data-testid={`activity-table-prompt-${row.draft_id}`}>
+                    {row.prompt_name || "Untitled Prompt"}
+                  </td>
+                  <td className="px-3 py-3 text-slate-700" data-testid={`activity-table-template-${row.draft_id}`}>
+                    {row.template_name || "-"}
+                  </td>
+                  <td className="px-3 py-3 text-slate-700" data-testid={`activity-table-created-${row.draft_id}`}>
+                    {row.created_by_username || "-"}
+                  </td>
+                  <td className="px-3 py-3 text-slate-700" data-testid={`activity-table-updatedby-${row.draft_id}`}>
+                    {row.updated_by_username || "-"}
+                  </td>
+                  <td className="px-3 py-3 text-slate-700" data-testid={`activity-table-updatedat-${row.draft_id}`}>
+                    {new Date(row.updated_at).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/builder?draftId=${row.draft_id}`)}
+                      data-testid={`activity-table-open-${row.draft_id}`}
+                    >
+                      Open
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
     </div>
   );
 };

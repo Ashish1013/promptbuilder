@@ -1,25 +1,74 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Save } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchTemplates, updateTemplateSection } from "@/lib/api";
+import { cloneTemplateLibraryItem, fetchTemplateLibrary, updateTemplateLibraryItem } from "@/lib/api";
+
+const VARIABLE_TYPES = [
+  { value: "text", label: "Text variable" },
+  { value: "select", label: "Pre-defined dropdown" },
+  { value: "multiselect", label: "Multi select dropdown" },
+];
+
+const createNewVariable = () => ({
+  key: "",
+  label: "",
+  placeholder: "",
+  required: false,
+  default_value: "",
+  input_type: "text",
+  options: [],
+});
+
+const createNewSubsection = () => ({
+  id: `sub_${crypto.randomUUID()}`,
+  title: "New Subsection",
+  description: "",
+  template_text: "",
+  variables: [],
+  enabled_by_default: true,
+});
+
+const createNewSection = () => ({
+  id: `section_${crypto.randomUUID()}`,
+  name: "New Section",
+  description: "",
+  template_text: "",
+  variables: [],
+  subsections: [],
+  enabled_by_default: true,
+});
 
 const TemplatesPage = ({ role }) => {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [editableTemplate, setEditableTemplate] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [cloning, setCloning] = useState(false);
+  const [cloneForm, setCloneForm] = useState({ source_template_id: "", new_template_name: "" });
 
-  const isAdmin = role === "admin";
+  const canManageTemplates = role === "admin";
+
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.id === selectedTemplateId) || null,
+    [selectedTemplateId, templates],
+  );
 
   const loadTemplates = async () => {
     setLoading(true);
     try {
-      const response = await fetchTemplates();
+      const response = await fetchTemplateLibrary();
       setTemplates(response);
+
+      if (!selectedTemplateId && response.length > 0) {
+        setSelectedTemplateId(response[0].id);
+        setEditableTemplate(JSON.parse(JSON.stringify(response[0])));
+      }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Unable to load templates.");
     } finally {
@@ -31,17 +80,60 @@ const TemplatesPage = ({ role }) => {
     loadTemplates();
   }, []);
 
-  const startEdit = (template) => {
-    setEditingId(template.id);
-    setEditableTemplate(JSON.parse(JSON.stringify(template)));
+  useEffect(() => {
+    if (selectedTemplate) {
+      setEditableTemplate(JSON.parse(JSON.stringify(selectedTemplate)));
+    }
+  }, [selectedTemplate]);
+
+  const updateSection = (sectionId, updater) => {
+    setEditableTemplate((prev) => ({
+      ...prev,
+      sections: prev.sections.map((section) => (section.id === sectionId ? updater(section) : section)),
+    }));
   };
 
-  const cancelEdit = () => {
-    setEditingId("");
-    setEditableTemplate(null);
+  const updateSubsection = (sectionId, subsectionId, updater) => {
+    updateSection(sectionId, (section) => ({
+      ...section,
+      subsections: section.subsections.map((subsection) =>
+        subsection.id === subsectionId ? updater(subsection) : subsection,
+      ),
+    }));
   };
 
-  const saveEdit = async () => {
+  const handleCloneTemplate = async () => {
+    if (!canManageTemplates) {
+      toast.error("Only admin can create templates.");
+      return;
+    }
+
+    if (!cloneForm.source_template_id || !cloneForm.new_template_name.trim()) {
+      toast.error("Select source template and provide new template name.");
+      return;
+    }
+
+    setCloning(true);
+    try {
+      const created = await cloneTemplateLibraryItem(cloneForm);
+      toast.success("Template created from existing template.");
+      setCloneForm({ source_template_id: "", new_template_name: "" });
+      await loadTemplates();
+      setSelectedTemplateId(created.id);
+      setEditableTemplate(JSON.parse(JSON.stringify(created)));
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Unable to clone template.");
+    } finally {
+      setCloning(false);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!canManageTemplates) {
+      toast.error("Only admin can update templates.");
+      return;
+    }
+
     if (!editableTemplate) {
       return;
     }
@@ -50,19 +142,15 @@ const TemplatesPage = ({ role }) => {
     try {
       const payload = {
         name: editableTemplate.name,
-        description: editableTemplate.description,
-        template_text: editableTemplate.template_text,
-        variables: editableTemplate.variables,
-        subsections: editableTemplate.subsections,
-        enabled_by_default: editableTemplate.enabled_by_default,
+        status: editableTemplate.status,
+        sections: editableTemplate.sections,
       };
-
-      const updated = await updateTemplateSection(editableTemplate.id, payload, role);
+      const updated = await updateTemplateLibraryItem(editableTemplate.id, payload);
       setTemplates((prev) => prev.map((template) => (template.id === updated.id ? updated : template)));
-      toast.success("Template section updated.");
-      cancelEdit();
+      setEditableTemplate(JSON.parse(JSON.stringify(updated)));
+      toast.success("Template saved.");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Unable to update template section.");
+      toast.error(error?.response?.data?.detail || "Unable to save template.");
     } finally {
       setSaving(false);
     }
@@ -78,153 +166,397 @@ const TemplatesPage = ({ role }) => {
 
   return (
     <div className="pane-scroll h-[calc(100vh-84px)] overflow-y-auto p-6 md:p-8 lg:p-10" data-testid="templates-page-container">
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3" data-testid="templates-page-header">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500" data-testid="templates-eyebrow">
-            Global Section Templates
-          </p>
-          <h2 className="mt-1 text-3xl font-bold text-slate-900" data-testid="templates-main-title">
-            Template Library
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm text-slate-600" data-testid="templates-page-description">
-            Admins can refine the global templates and subsection raw text here. Changes immediately impact new prompts.
-          </p>
-        </div>
-        <Badge className="bg-slate-100 text-slate-700" data-testid="templates-role-badge">
-          Active Role: {role}
-        </Badge>
+      <div className="mb-8" data-testid="templates-page-header">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500" data-testid="templates-eyebrow">
+          Template Library
+        </p>
+        <h2 className="mt-1 text-3xl font-bold text-slate-900" data-testid="templates-main-title">
+          Build Templates from Existing Ones
+        </h2>
       </div>
 
-      {!isAdmin && (
-        <div
-          className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800"
-          data-testid="templates-readonly-banner"
+      <Card className="mb-6 border-slate-200 shadow-sm" data-testid="template-clone-card">
+        <CardHeader>
+          <CardTitle className="text-lg font-bold text-slate-900" data-testid="template-clone-title">
+            Create New Template Using Existing Template
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+          <select
+            value={cloneForm.source_template_id}
+            onChange={(event) => setCloneForm((prev) => ({ ...prev, source_template_id: event.target.value }))}
+            className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+            data-testid="template-clone-source-select"
+          >
+            <option value="">Select existing template</option>
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+
+          <Input
+            value={cloneForm.new_template_name}
+            onChange={(event) => setCloneForm((prev) => ({ ...prev, new_template_name: event.target.value }))}
+            placeholder="Name for new template"
+            data-testid="template-clone-name-input"
+          />
+
+          <Button type="button" onClick={handleCloneTemplate} disabled={cloning || !canManageTemplates} data-testid="template-clone-button">
+            {cloning ? "Creating..." : "Create"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3" data-testid="template-selection-bar">
+        <select
+          value={selectedTemplateId}
+          onChange={(event) => setSelectedTemplateId(event.target.value)}
+          className="h-10 min-w-[320px] rounded-md border border-slate-300 bg-white px-3 text-sm"
+          data-testid="template-selected-template-select"
         >
-          You are in read-only mode. Switch to admin role to edit templates.
-        </div>
-      )}
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
+        </select>
 
-      <div className="space-y-6" data-testid="templates-card-stack">
-        {templates.map((template) => {
-          const isEditing = editingId === template.id;
-          const currentTemplate = isEditing ? editableTemplate : template;
+        {editableTemplate && (
+          <>
+            <Badge className="bg-slate-100 text-slate-700" data-testid="template-selected-status-badge">
+              Status: {editableTemplate.status}
+            </Badge>
+            <Button
+              type="button"
+              onClick={() =>
+                setEditableTemplate((prev) => ({
+                  ...prev,
+                  sections: [...prev.sections, createNewSection()],
+                }))
+              }
+              disabled={!canManageTemplates}
+              data-testid="template-add-section-button"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Section
+            </Button>
+            <Button type="button" onClick={handleSaveTemplate} disabled={saving || !canManageTemplates} data-testid="template-save-button">
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? "Saving..." : "Save Template"}
+            </Button>
+          </>
+        )}
+      </div>
 
-          return (
-            <Card key={template.id} className="border-slate-200 shadow-sm" data-testid={`template-card-${template.id}`}>
-              <CardHeader className="border-b border-slate-100 bg-slate-50/70">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-xl font-bold text-slate-900" data-testid={`template-title-${template.id}`}>
-                      {template.name}
-                    </CardTitle>
-                    <p className="mt-1 text-sm text-slate-600" data-testid={`template-description-${template.id}`}>
-                      {template.description}
-                    </p>
-                  </div>
+      {editableTemplate && (
+        <Card className="border-slate-200 shadow-sm" data-testid="template-editor-card">
+          <CardContent className="space-y-6 p-6">
+            <div className="grid gap-4 md:grid-cols-2" data-testid="template-top-fields">
+              <Input
+                value={editableTemplate.name}
+                onChange={(event) => setEditableTemplate((prev) => ({ ...prev, name: event.target.value }))}
+                disabled={!canManageTemplates}
+                placeholder="Template Name"
+                data-testid="template-name-input"
+              />
+              <select
+                value={editableTemplate.status}
+                onChange={(event) => setEditableTemplate((prev) => ({ ...prev, status: event.target.value }))}
+                disabled={!canManageTemplates}
+                className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                data-testid="template-status-select"
+              >
+                <option value="draft">Draft</option>
+                <option value="ready">Ready</option>
+              </select>
+            </div>
 
-                  {isAdmin && !isEditing && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => startEdit(template)}
-                      data-testid={`template-edit-button-${template.id}`}
-                    >
-                      Edit Section
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
+            <div className="space-y-6" data-testid="template-sections-stack">
+              {editableTemplate.sections.map((section) => (
+                <Card key={section.id} className="border-slate-200" data-testid={`template-section-card-${section.id}`}>
+                  <CardHeader className="space-y-3 border-b border-slate-100 bg-slate-50/70">
+                    <Input
+                      value={section.name}
+                      onChange={(event) => updateSection(section.id, (prev) => ({ ...prev, name: event.target.value }))}
+                      disabled={!canManageTemplates}
+                      data-testid={`template-section-name-input-${section.id}`}
+                    />
+                    <Textarea
+                      value={section.template_text}
+                      onChange={(event) => updateSection(section.id, (prev) => ({ ...prev, template_text: event.target.value }))}
+                      disabled={!canManageTemplates}
+                      className="min-h-24 font-mono text-sm"
+                      data-testid={`template-section-textarea-${section.id}`}
+                    />
+                  </CardHeader>
 
-              <CardContent className="space-y-5 p-6">
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500" data-testid={`template-raw-label-${template.id}`}>
-                    Section Raw Template
-                  </p>
-                  <Textarea
-                    value={currentTemplate?.template_text || ""}
-                    disabled={!isEditing}
-                    onChange={(event) =>
-                      setEditableTemplate((prev) => ({
-                        ...prev,
-                        template_text: event.target.value,
-                      }))
-                    }
-                    className="min-h-36 bg-slate-50 font-mono text-sm"
-                    data-testid={`template-raw-textarea-${template.id}`}
-                  />
-                </div>
-
-                <div className="space-y-2" data-testid={`template-variable-block-${template.id}`}>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Variables</p>
-                  <div className="flex flex-wrap gap-2">
-                    {(currentTemplate?.variables || []).map((variable) => (
-                      <Badge
-                        key={`${template.id}-${variable.key}`}
-                        className="bg-indigo-100 text-indigo-700"
-                        data-testid={`template-variable-badge-${template.id}-${variable.key}`}
+                  <CardContent className="space-y-4 p-4">
+                    <div className="flex flex-wrap items-center gap-2" data-testid={`template-section-variable-actions-${section.id}`}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          updateSection(section.id, (prev) => ({
+                            ...prev,
+                            variables: [...(prev.variables || []), createNewVariable()],
+                          }))
+                        }
+                        disabled={!canManageTemplates}
+                        data-testid={`template-section-add-variable-${section.id}`}
                       >
-                        {variable.key}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
+                        Add Variable
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          updateSection(section.id, (prev) => ({
+                            ...prev,
+                            subsections: [...(prev.subsections || []), createNewSubsection()],
+                          }))
+                        }
+                        disabled={!canManageTemplates}
+                        data-testid={`template-section-add-subsection-${section.id}`}
+                      >
+                        Add Subsection
+                      </Button>
+                    </div>
 
-                {(currentTemplate?.subsections || []).length > 0 && (
-                  <div className="space-y-4" data-testid={`template-subsection-stack-${template.id}`}>
-                    <p className="text-sm font-semibold text-slate-800">Subsections</p>
-                    {currentTemplate.subsections.map((subsection, index) => (
+                    {(section.variables || []).map((variable, variableIndex) => (
                       <div
-                        key={subsection.id}
-                        className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-4"
-                        data-testid={`template-subsection-card-${template.id}-${subsection.id}`}
+                        key={`${section.id}-var-${variableIndex}`}
+                        className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 md:grid-cols-[1fr_1fr_200px_1fr_auto]"
+                        data-testid={`template-variable-row-${section.id}-${variableIndex}`}
                       >
-                        <p className="text-sm font-semibold text-slate-900" data-testid={`template-subsection-title-${template.id}-${subsection.id}`}>
-                          {subsection.title}
-                        </p>
-                        <Textarea
-                          value={subsection.template_text}
-                          disabled={!isEditing}
+                        <Input
+                          value={variable.key}
                           onChange={(event) =>
-                            setEditableTemplate((prev) => {
-                              const nextSubsections = prev.subsections.map((item, itemIndex) =>
-                                itemIndex === index ? { ...item, template_text: event.target.value } : item,
-                              );
-                              return { ...prev, subsections: nextSubsections };
+                            updateSection(section.id, (prev) => {
+                              const nextVariables = [...prev.variables];
+                              nextVariables[variableIndex] = { ...nextVariables[variableIndex], key: event.target.value };
+                              return { ...prev, variables: nextVariables };
                             })
                           }
-                          className="min-h-24 bg-white font-mono text-sm"
-                          data-testid={`template-subsection-textarea-${template.id}-${subsection.id}`}
+                          disabled={!canManageTemplates}
+                          placeholder="variable_key"
+                          data-testid={`template-variable-key-${section.id}-${variableIndex}`}
                         />
+                        <Input
+                          value={variable.label}
+                          onChange={(event) =>
+                            updateSection(section.id, (prev) => {
+                              const nextVariables = [...prev.variables];
+                              nextVariables[variableIndex] = { ...nextVariables[variableIndex], label: event.target.value };
+                              return { ...prev, variables: nextVariables };
+                            })
+                          }
+                          disabled={!canManageTemplates}
+                          placeholder="Label"
+                          data-testid={`template-variable-label-${section.id}-${variableIndex}`}
+                        />
+                        <select
+                          value={variable.input_type || "text"}
+                          onChange={(event) =>
+                            updateSection(section.id, (prev) => {
+                              const nextVariables = [...prev.variables];
+                              nextVariables[variableIndex] = {
+                                ...nextVariables[variableIndex],
+                                input_type: event.target.value,
+                              };
+                              return { ...prev, variables: nextVariables };
+                            })
+                          }
+                          disabled={!canManageTemplates}
+                          className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                          data-testid={`template-variable-type-${section.id}-${variableIndex}`}
+                        >
+                          {VARIABLE_TYPES.map((option) => (
+                            <option key={`${section.id}-${variableIndex}-${option.value}`} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Input
+                          value={(variable.options || []).join(", ")}
+                          onChange={(event) =>
+                            updateSection(section.id, (prev) => {
+                              const nextVariables = [...prev.variables];
+                              nextVariables[variableIndex] = {
+                                ...nextVariables[variableIndex],
+                                options: event.target.value
+                                  .split(",")
+                                  .map((item) => item.trim())
+                                  .filter(Boolean),
+                              };
+                              return { ...prev, variables: nextVariables };
+                            })
+                          }
+                          disabled={!canManageTemplates}
+                          placeholder="Option A, Option B"
+                          data-testid={`template-variable-options-${section.id}-${variableIndex}`}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() =>
+                            updateSection(section.id, (prev) => ({
+                              ...prev,
+                              template_text: `${prev.template_text} {${variable.key}}`.trim(),
+                            }))
+                          }
+                          disabled={!canManageTemplates || !variable.key}
+                          data-testid={`template-variable-insert-${section.id}-${variableIndex}`}
+                        >
+                          Insert
+                        </Button>
                       </div>
                     ))}
-                  </div>
-                )}
 
-                {isEditing && (
-                  <div className="flex flex-wrap items-center justify-end gap-2" data-testid={`template-edit-actions-${template.id}`}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={cancelEdit}
-                      data-testid={`template-cancel-button-${template.id}`}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={saveEdit}
-                      disabled={saving}
-                      data-testid={`template-save-button-${template.id}`}
-                    >
-                      {saving ? "Saving..." : "Save Template"}
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                    {(section.subsections || []).map((subsection, subsectionIndex) => (
+                      <div
+                        key={subsection.id}
+                        className="space-y-3 rounded-md border border-slate-200 bg-white p-3"
+                        data-testid={`template-subsection-card-${section.id}-${subsection.id}`}
+                      >
+                        <Input
+                          value={subsection.title}
+                          onChange={(event) =>
+                            updateSubsection(section.id, subsection.id, (prev) => ({ ...prev, title: event.target.value }))
+                          }
+                          disabled={!canManageTemplates}
+                          data-testid={`template-subsection-title-${section.id}-${subsection.id}`}
+                        />
+                        <Textarea
+                          value={subsection.template_text}
+                          onChange={(event) =>
+                            updateSubsection(section.id, subsection.id, (prev) => ({
+                              ...prev,
+                              template_text: event.target.value,
+                            }))
+                          }
+                          disabled={!canManageTemplates}
+                          className="min-h-20 font-mono text-sm"
+                          data-testid={`template-subsection-textarea-${section.id}-${subsection.id}`}
+                        />
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            updateSubsection(section.id, subsection.id, (prev) => ({
+                              ...prev,
+                              variables: [...(prev.variables || []), createNewVariable()],
+                            }))
+                          }
+                          disabled={!canManageTemplates}
+                          data-testid={`template-subsection-add-variable-${section.id}-${subsection.id}`}
+                        >
+                          Add Subsection Variable
+                        </Button>
+
+                        {(subsection.variables || []).map((variable, variableIndex) => (
+                          <div
+                            key={`${subsection.id}-var-${variableIndex}`}
+                            className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-2 md:grid-cols-[1fr_1fr_180px_1fr_auto]"
+                            data-testid={`template-subsection-variable-row-${section.id}-${subsection.id}-${variableIndex}`}
+                          >
+                            <Input
+                              value={variable.key}
+                              onChange={(event) =>
+                                updateSubsection(section.id, subsection.id, (prev) => {
+                                  const nextVariables = [...prev.variables];
+                                  nextVariables[variableIndex] = { ...nextVariables[variableIndex], key: event.target.value };
+                                  return { ...prev, variables: nextVariables };
+                                })
+                              }
+                              disabled={!canManageTemplates}
+                              placeholder="variable_key"
+                              data-testid={`template-subsection-variable-key-${section.id}-${subsection.id}-${variableIndex}`}
+                            />
+                            <Input
+                              value={variable.label}
+                              onChange={(event) =>
+                                updateSubsection(section.id, subsection.id, (prev) => {
+                                  const nextVariables = [...prev.variables];
+                                  nextVariables[variableIndex] = { ...nextVariables[variableIndex], label: event.target.value };
+                                  return { ...prev, variables: nextVariables };
+                                })
+                              }
+                              disabled={!canManageTemplates}
+                              placeholder="Label"
+                              data-testid={`template-subsection-variable-label-${section.id}-${subsection.id}-${variableIndex}`}
+                            />
+                            <select
+                              value={variable.input_type || "text"}
+                              onChange={(event) =>
+                                updateSubsection(section.id, subsection.id, (prev) => {
+                                  const nextVariables = [...prev.variables];
+                                  nextVariables[variableIndex] = {
+                                    ...nextVariables[variableIndex],
+                                    input_type: event.target.value,
+                                  };
+                                  return { ...prev, variables: nextVariables };
+                                })
+                              }
+                              disabled={!canManageTemplates}
+                              className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"
+                              data-testid={`template-subsection-variable-type-${section.id}-${subsection.id}-${variableIndex}`}
+                            >
+                              {VARIABLE_TYPES.map((option) => (
+                                <option key={`${subsection.id}-${variableIndex}-${option.value}`} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <Input
+                              value={(variable.options || []).join(", ")}
+                              onChange={(event) =>
+                                updateSubsection(section.id, subsection.id, (prev) => {
+                                  const nextVariables = [...prev.variables];
+                                  nextVariables[variableIndex] = {
+                                    ...nextVariables[variableIndex],
+                                    options: event.target.value
+                                      .split(",")
+                                      .map((item) => item.trim())
+                                      .filter(Boolean),
+                                  };
+                                  return { ...prev, variables: nextVariables };
+                                })
+                              }
+                              disabled={!canManageTemplates}
+                              placeholder="Option A, Option B"
+                              data-testid={`template-subsection-variable-options-${section.id}-${subsection.id}-${variableIndex}`}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() =>
+                                updateSubsection(section.id, subsection.id, (prev) => ({
+                                  ...prev,
+                                  template_text: `${prev.template_text} {${variable.key}}`.trim(),
+                                }))
+                              }
+                              disabled={!canManageTemplates || !variable.key}
+                              data-testid={`template-subsection-variable-insert-${section.id}-${subsection.id}-${variableIndex}`}
+                            >
+                              Insert
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

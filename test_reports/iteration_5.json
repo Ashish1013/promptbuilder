@@ -1,0 +1,44 @@
+{
+  "summary": "Completed backend + frontend regression for IA refactor on public URL: navigation, activity, builder setup/3-pane flow, template clone/edit lifecycle, settings role management, and auth-protected template/activity APIs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ActivityPage",
+        "issue": "Role badge label is hardcoded as 'Viewer' regardless of logged-in role, causing incorrect role display for admin/editor users.",
+        "selector": "[data-testid='activity-role-badge']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ia_activity_template_library.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix ActivityPage role badge text to reflect currentUser.role dynamically instead of hardcoded 'Viewer'.",
+    "Add /app/memory/test_credentials.md to repository (or documented equivalent) per auth testing policy."
+  ],
+  "critical_code_review_comments": [
+    "frontend/src/pages/ActivityPage.jsx line around activity-role-badge currently renders static label text and should use normalized currentUser.role for correctness.",
+    "Auth testing policy file /app/memory/test_credentials.md is missing in workspace, reducing reproducibility of credential-based test runs."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ia_activity_template_library.py",
+    "/app/test_reports/iteration_5.json"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 targeted pytest tests passed)",
+    "frontend": "95% (all requested flows passed; 1 role-label UI correctness issue found)"
+  },
+  "seed_data_creation": "Created test data: one cloned template (set draft->ready), one prompt draft from builder flow, one user (uiuser<suffix>) and role change in settings.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "IA flow is operational end-to-end on public URL. Template status filtering for builder READY list is working. Settings matrix save and user role assignment work. Validate the role badge text fix on Activity page once patched.",
+  "rca of the issue": "Activity badge copy regression: in ActivityPage.jsx the text is hardcoded as `Viewer: {currentUser?.username}` rather than deriving role from authenticated user state. This is a display bug only; backend role/permission enforcement remains correct."
+}

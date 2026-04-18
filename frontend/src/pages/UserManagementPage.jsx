@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { createUser, fetchRolesMatrix, fetchUsers, updateUserRole } from "@/lib/api";
+import { createUser, fetchRolesMatrix, fetchUsers, updateRolesMatrix, updateUserRole } from "@/lib/api";
 
 const ROLE_OPTIONS = ["admin", "editor", "viewer"];
 
@@ -14,6 +14,7 @@ const UserManagementPage = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState("");
   const [creating, setCreating] = useState(false);
+  const [savingPermissions, setSavingPermissions] = useState(false);
   const [newUser, setNewUser] = useState({
     full_name: "",
     username: "",
@@ -80,6 +81,33 @@ const UserManagementPage = ({ currentUser }) => {
       toast.error(error?.response?.data?.detail || "Unable to update role.");
     } finally {
       setSavingUserId("");
+    }
+  };
+
+  const handlePermissionToggle = (roleName, permissionKey, nextValue) => {
+    setRolesMatrix((prev) => ({
+      ...prev,
+      [roleName]: {
+        ...prev[roleName],
+        [permissionKey]: nextValue,
+      },
+    }));
+  };
+
+  const handleSavePermissions = async () => {
+    if (!isAdmin || !rolesMatrix) {
+      return;
+    }
+
+    setSavingPermissions(true);
+    try {
+      const updated = await updateRolesMatrix({ roles: rolesMatrix });
+      setRolesMatrix(updated);
+      toast.success("Role permissions updated.");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Unable to update role permissions.");
+    } finally {
+      setSavingPermissions(false);
     }
   };
 
@@ -209,10 +237,13 @@ const UserManagementPage = ({ currentUser }) => {
 
       {rolesMatrix && (
         <Card className="border-slate-200 shadow-sm" data-testid="roles-matrix-card">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-xl font-bold text-slate-900" data-testid="roles-matrix-title">
-              Permission Matrix
+              Permission Matrix (Editable)
             </CardTitle>
+            <Button type="button" onClick={handleSavePermissions} disabled={savingPermissions} data-testid="roles-matrix-save-button">
+              {savingPermissions ? "Saving..." : "Save Permissions"}
+            </Button>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="w-full border-collapse" data-testid="roles-matrix-table">
@@ -236,12 +267,18 @@ const UserManagementPage = ({ currentUser }) => {
                     <td className="px-2 py-2 text-sm text-slate-700">{permission}</td>
                     {ROLE_OPTIONS.map((role) => (
                       <td key={`${permission}-${role}`} className="px-2 py-2">
-                        <Badge
-                          className={rolesMatrix[role][permission] ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}
+                        <label
+                          className="inline-flex items-center gap-2 text-sm text-slate-700"
                           data-testid={`roles-matrix-value-${permission}-${role}`}
                         >
+                          <input
+                            type="checkbox"
+                            checked={Boolean(rolesMatrix[role][permission])}
+                            onChange={(event) => handlePermissionToggle(role, permission, event.target.checked)}
+                            data-testid={`roles-matrix-toggle-${permission}-${role}`}
+                          />
                           {rolesMatrix[role][permission] ? "Allowed" : "Blocked"}
-                        </Badge>
+                        </label>
                       </td>
                     ))}
                   </tr>
