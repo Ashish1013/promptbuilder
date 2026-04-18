@@ -13,9 +13,9 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 ## Architecture Decisions
 - **Frontend:** React + React Router + Shadcn UI + Framer Motion
 - **Backend:** FastAPI
-- **Database:** MongoDB (template sections and prompt drafts)
-- **API pattern:** `/api/templates`, `/api/prompts`, `/api/prompts/compile`, `/api/roles`
-- **Access control:** role header (`x-user-role`) with backend permission enforcement
+- **Database:** MongoDB (`prompt_templates`, `prompt_drafts`, `users`, `role_permissions`)
+- **API pattern:** `/api/template-library`, `/api/prompts`, `/api/activity`, `/api/roles`, `/api/users`
+- **Access control:** JWT auth + server-side permission matrix enforcement
 
 ## User Personas
 - **Admin:** manages global section templates and subsection raw text
@@ -57,10 +57,18 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Added required-field validation before save for selected sections/subsections
 - Added template hydration logic so loaded drafts retain correct variable controls from latest template definitions
 
+### 2026-04-18 (IA + Workflow Refactor)
+- Refactored top-level product architecture to **Activity / Builder / Template Library / Settings**
+- Activity page now renders a compact table of prompts created via builder and supports opening any draft
+- Builder now starts with required setup flow: choose **READY** template → name prompt → open 3-pane builder
+- Builder output pane now prioritizes single editable prompt text block with compact copy/download/reset actions
+- Template Library now supports clone-from-existing workflow only (no scratch creation), template status management, section/subsection editing, variable type definition, and placeholder insertion into template text
+- Settings now includes editable role-permission matrix with persistence, plus user creation and role assignment
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
-- Add validation UI for required variables before save/export
+- Add per-template validation mode toggle (strict vs flexible)
 
 ### P1 (Important)
 - Add side-by-side diff for raw template edits
@@ -73,7 +81,7 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Add bulk export options (zip/combined formats)
 
 ## Next Tasks List
-1. Implement required-variable validation and inline error markers in builder
+1. Implement inline variable guidance markers (without hard mandatory blocking)
 2. Add autosave draft mode with last-saved indicator
 3. Add quick-jump navigation by selected section in middle pane
 4. Add template change history log for admin governance

@@ -60,7 +60,7 @@ const ActivityPage = ({ currentUser }) => {
           {rows.length} prompts
         </Badge>
         <Badge className="bg-slate-100 text-slate-700" data-testid="activity-role-badge">
-          Viewer: {currentUser?.username}
+          Role: {currentUser?.role}
         </Badge>
       </div>
 
