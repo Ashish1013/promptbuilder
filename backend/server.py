@@ -934,6 +934,34 @@ async def archive_template(
     return PromptTemplate(**template_doc)
 
 
+@api_router.put("/template-library/{template_id}/unarchive", response_model=PromptTemplate)
+async def unarchive_template(
+    template_id: str,
+    authorization: Optional[str] = Header(default=None),
+) -> PromptTemplate:
+    current_user = await get_current_user_from_authorization(authorization)
+    await enforce_permission(current_user.role, "can_manage_templates")
+
+    result = await db.prompt_templates.update_one(
+        {"id": template_id},
+        {
+            "$set": {
+                "archived": False,
+                "status": "draft",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found.")
+
+    template_doc = await db.prompt_templates.find_one({"id": template_id}, {"_id": 0})
+    if not template_doc:
+        raise HTTPException(status_code=404, detail="Template not found.")
+
+    return PromptTemplate(**template_doc)
+
+
 @api_router.get("/users", response_model=List[UserPublic])
 async def list_users(authorization: Optional[str] = Header(default=None)) -> List[UserPublic]:
     await ensure_default_admin_user()

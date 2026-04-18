@@ -19,6 +19,7 @@ import {
   cloneTemplateLibraryItem,
   fetchArchivedTemplates,
   fetchTemplateLibrary,
+  unarchiveTemplateLibraryItem,
   updateTemplateLibraryItem,
 } from "@/lib/api";
 
@@ -135,6 +136,7 @@ const TemplatesPage = ({ role }) => {
   const [saving, setSaving] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [archiveInProgressId, setArchiveInProgressId] = useState("");
+  const [unarchiveInProgressId, setUnarchiveInProgressId] = useState("");
   const [createModal, setCreateModal] = useState({ open: false, sourceTemplateId: "", newTemplateName: "" });
   const [archiveModal, setArchiveModal] = useState({ open: false, step: 1, templateId: "", templateName: "" });
 
@@ -340,6 +342,24 @@ const TemplatesPage = ({ role }) => {
     }
   };
 
+  const handleUnarchiveTemplate = async (templateId) => {
+    if (!canManageTemplates) {
+      toast.error("Only admin can unarchive templates.");
+      return;
+    }
+
+    setUnarchiveInProgressId(templateId);
+    try {
+      await unarchiveTemplateLibraryItem(templateId);
+      await loadTemplates();
+      toast.success("Template unarchived as not-ready.");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Unable to unarchive template.");
+    } finally {
+      setUnarchiveInProgressId("");
+    }
+  };
+
   const handleSaveTemplate = async () => {
     if (!canManageTemplates || !editableTemplate) {
       return;
@@ -467,6 +487,19 @@ const TemplatesPage = ({ role }) => {
                         data-testid={`template-archive-button-${template.id}`}
                       >
                         {archiveInProgressId === template.id ? "Archiving..." : "Archive"}
+                      </Button>
+                    )}
+
+                    {template.archived && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleUnarchiveTemplate(template.id)}
+                        disabled={!canManageTemplates || unarchiveInProgressId === template.id}
+                        data-testid={`template-unarchive-button-${template.id}`}
+                      >
+                        {unarchiveInProgressId === template.id ? "Unarchiving..." : "Unarchive"}
                       </Button>
                     )}
                   </div>
@@ -870,15 +903,33 @@ const TemplatesPage = ({ role }) => {
                             return (
                               <Card key={subsection.id} className="border-emerald-200 bg-white" data-testid={`template-subsection-card-${section.id}-${subsection.id}`}>
                                 <CardHeader className="py-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleSubsection(section.id, subsection.id)}
-                                    className="flex items-center gap-2 text-left text-sm font-semibold text-emerald-900"
-                                    data-testid={`template-subsection-expand-toggle-${section.id}-${subsection.id}`}
-                                  >
-                                    {subsectionExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                    {subsection.title || "Untitled Subsection"}
-                                  </button>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSubsection(section.id, subsection.id)}
+                                      className="flex items-center gap-2 text-left text-sm font-semibold text-emerald-900"
+                                      data-testid={`template-subsection-expand-toggle-${section.id}-${subsection.id}`}
+                                    >
+                                      {subsectionExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                      {subsection.title || "Untitled Subsection"}
+                                    </button>
+
+                                    <Button
+                                      type="button"
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() =>
+                                        updateSection(section.id, (prev) => ({
+                                          ...prev,
+                                          subsections: prev.subsections.filter((item) => item.id !== subsection.id),
+                                        }))
+                                      }
+                                      disabled={!canManageTemplates}
+                                      data-testid={`template-subsection-delete-${section.id}-${subsection.id}`}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
                                 </CardHeader>
 
                                 {subsectionExpanded && (

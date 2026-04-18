@@ -115,6 +115,11 @@ export const archiveTemplateLibraryItem = async (templateId) => {
   return response.data;
 };
 
+export const unarchiveTemplateLibraryItem = async (templateId) => {
+  const response = await apiClient.put(`/template-library/${templateId}/unarchive`);
+  return response.data;
+};
+
 export const fetchTemplates = async () => {
   const response = await apiClient.get("/templates");
   return response.data;
