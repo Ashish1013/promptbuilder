@@ -94,6 +94,13 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Enforced unarchive behavior to always return template as **not-ready (draft)**
 - Preserved explicit readiness control so users can re-mark unarchived templates as ready manually when needed
 
+### 2026-04-18 (Builder Stability + Variable Sync Fixes)
+- Fixed Builder existing-draft behavior so right-pane prompt output now auto-updates again when middle-pane variable values change
+- Kept editable-output behavior intact by marking output as manual only after user types in the right-pane textarea during the current session
+- Improved placeholder substitution robustness with case-insensitive key matching in both frontend compile helper and backend `/api/prompts/compile`
+- Validated Builder home flow: existing prompts table (team-wide), `Create New Prompt` modal with prompt name + READY template selection, and successful workspace launch
+- Verified via automated test report `/app/test_reports/iteration_10.json` (backend + frontend pass)
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
@@ -104,6 +111,7 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Add reusable snippet presets for common verticals
 - Add richer metadata tagging (industry, campaign type, locale)
 - Split oversized frontend/backend files into modular components/services for maintainability
+- Cleanly normalize legacy template variable keys to reduce duplicate-looking fields in old drafts
 
 ### P2 (Enhancement)
 - Add prompt quality checklist scoring (deterministic rules)
