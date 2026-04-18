@@ -72,6 +72,16 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Grouped variables under collapsible blocks (collapsed by default) at section and subsection levels
 - Improved visual hierarchy with distinct color zones for section, subsection, variables, and option groups
 
+### 2026-04-18 (Template Flow + Governance Upgrade)
+- Updated collapsed section headers to show **actual section names** for easier sequencing
+- Introduced strict 2-step template creation flow: choose base template → name new template in modal → open editor
+- Added clear **Ready checkbox** on template cards for quick readiness control
+- Added template archiving with **two-step confirmation** and dedicated archived templates view
+- Ensured archived templates are excluded from Builder template selection (automatically not-ready behavior)
+- Added drag-and-drop section reordering (in addition to up/down controls)
+- Added expandable/collapsible subsections inside each section card
+- Added **delete user** action in Settings to immediately revoke access and remove user account
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
@@ -81,6 +91,7 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Add side-by-side diff for raw template edits
 - Add reusable snippet presets for common verticals
 - Add richer metadata tagging (industry, campaign type, locale)
+- Split oversized frontend/backend files into modular components/services for maintainability
 
 ### P2 (Enhancement)
 - Add prompt quality checklist scoring (deterministic rules)
