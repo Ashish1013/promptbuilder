@@ -81,10 +81,6 @@ const LoginPage = ({ onLoginSuccess }) => {
             <Button type="submit" className="w-full" disabled={submitting} data-testid="login-submit-button">
               {submitting ? "Signing in..." : "Login"}
             </Button>
-
-            <div className="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-700" data-testid="login-default-credentials-note">
-              Default admin (for first login): username <strong>admin</strong>, password <strong>admin123</strong>
-            </div>
           </form>
         </CardContent>
       </Card>

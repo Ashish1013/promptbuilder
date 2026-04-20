@@ -108,6 +108,11 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Added resilient definition matching for display metadata/input types even when key casing differs
 - Verified with automated frontend regression report `/app/test_reports/iteration_11.json` (100% pass)
 
+### 2026-04-20 (Auth/Header UI Cleanup)
+- Removed login-page default credential hint block so username/password are no longer shown on the UI
+- Removed header username/role pills beside Logout as requested (kept only Logout action)
+- Verified in-browser: credential note hidden and both header badges removed, with logout still functional
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away

@@ -1,5 +1,4 @@
 import { NavLink } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
@@ -47,12 +46,6 @@ export const AppShell = ({ children, currentUser, onLogout }) => {
           </nav>
 
           <div className="flex flex-wrap items-center justify-end gap-2" data-testid="user-control-container">
-            <Badge className="max-w-[200px] border-slate-300 bg-white text-slate-700" data-testid="current-user-badge">
-              <span className="truncate">{currentUser?.username}</span>
-            </Badge>
-            <Badge className="border-slate-300 bg-white text-slate-700" data-testid="current-role-badge">
-              {currentUser?.role}
-            </Badge>
             <Button type="button" variant="outline" onClick={onLogout} data-testid="logout-button">
               Logout
             </Button>
