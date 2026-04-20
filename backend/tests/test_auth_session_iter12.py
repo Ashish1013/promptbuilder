@@ -284,11 +284,11 @@ class TestRoleUserAPIs:
         assert update_response.status_code == 200, f"Update role failed: {update_response.text}"
         updated_user = update_response.json()
         assert updated_user["role"] == "viewer"
-        print(f"✓ Updated user role from editor to viewer")
+        print("✓ Updated user role from editor to viewer")
         
         # Cleanup
         requests.delete(f"{BASE_URL}/api/users/{user_id}", headers=admin_headers)
-        print(f"✓ Cleaned up test user")
+        print("✓ Cleaned up test user")
 
 
 class TestCoreAPIsWithAuth:

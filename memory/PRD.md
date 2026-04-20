@@ -113,6 +113,15 @@ ReachAll delivers voice AI agents as a managed service for business customers. T
 - Removed header username/role pills beside Logout as requested (kept only Logout action)
 - Verified in-browser: credential note hidden and both header badges removed, with logout still functional
 
+### 2026-04-20 (Code Review Fix Batch)
+- Migrated frontend auth persistence from `localStorage` to `sessionStorage` via centralized storage helpers in `src/lib/api.js`
+- Updated session hydration in `App.js` to use the new token accessor and stable callback pattern
+- Hardened hook usage patterns in Activity, Role Access, Drafts, Templates, and User Management pages using callback-based loaders + dependency-safe effects
+- Improved Builder utility error handling (clipboard fallback path now logs copy failures) and optimized PreviewPane render flow with memoized enabled-section derivation
+- Replaced non-idiomatic test assertions using `is True/False` in backend test suite with robust truthy/falsy assertions; lint now passes
+- Added `/app/auth_testing.md` with auth/session validation checklist
+- Verified via `/app/test_reports/iteration_12.json` (frontend 100%, backend 15/15 tests passed)
+
 ## Prioritized Backlog
 ### P0 (Critical, next)
 - Add optimistic autosave + unsaved-change guard when navigating away
