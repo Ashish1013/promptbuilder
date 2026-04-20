@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,21 +15,21 @@ const RoleAccessPage = ({ role }) => {
   const [roleMatrix, setRoleMatrix] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadRoles = async () => {
-      setLoading(true);
-      try {
-        const response = await fetchRolesMatrix();
-        setRoleMatrix(response);
-      } catch (error) {
-        toast.error(error?.response?.data?.detail || "Unable to load role permissions.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadRoles();
+  const loadRoles = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetchRolesMatrix();
+      setRoleMatrix(response);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Unable to load role permissions.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadRoles();
+  }, [loadRoles]);
 
   if (loading) {
     return (

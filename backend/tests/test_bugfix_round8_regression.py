@@ -112,7 +112,7 @@ class TestBugfixRound8Regression:
         assert clone_resp.status_code == 200
         cloned = clone_resp.json()
         assert cloned["name"] == clone_name
-        assert cloned["archived"] is False
+        assert not cloned["archived"]
 
         archive_resp = api_client.put(
             f"{BASE_URL}/api/template-library/{cloned['id']}/archive",
@@ -122,7 +122,7 @@ class TestBugfixRound8Regression:
         assert archive_resp.status_code == 200
         archived_item = archive_resp.json()
         assert archived_item["id"] == cloned["id"]
-        assert archived_item["archived"] is True
+        assert archived_item["archived"]
         assert archived_item["status"] == "draft"
 
         active_after_resp = api_client.get(f"{BASE_URL}/api/template-library", headers=admin_headers, timeout=20)
@@ -135,4 +135,4 @@ class TestBugfixRound8Regression:
         archived_list = archived_list_resp.json()
         archived_match = next((item for item in archived_list if item["id"] == cloned["id"]), None)
         assert archived_match is not None
-        assert archived_match["archived"] is True
+        assert archived_match["archived"]

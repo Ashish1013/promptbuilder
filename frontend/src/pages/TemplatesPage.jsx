@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -145,7 +145,7 @@ const TemplatesPage = ({ role }) => {
 
   const selectedTemplateForModal = useMemo(
     () => templates.find((template) => template.id === createModal.sourceTemplateId),
-    [createModal.sourceTemplateId, templates],
+    [createModal, templates],
   );
 
   const initializeExpansionState = (template) => {
@@ -168,7 +168,7 @@ const TemplatesPage = ({ role }) => {
     setExpandedVariableGroups(variableGroupState);
   };
 
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async () => {
     setLoading(true);
     try {
       const [active, archived] = await Promise.all([fetchTemplateLibrary(), fetchArchivedTemplates()]);
@@ -179,11 +179,11 @@ const TemplatesPage = ({ role }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadTemplates();
-  }, []);
+  }, [loadTemplates]);
 
   const openEditor = (template) => {
     setEditableTemplate(normalizeTemplateForEditing(template));

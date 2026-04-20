@@ -89,7 +89,7 @@ class TestTemplateArchiveAndUserAccess:
         cloned = clone_resp.json()
         assert cloned["name"] == clone_name
         assert cloned["status"] == "draft"
-        assert cloned["archived"] is False
+        assert not cloned["archived"]
 
         mark_ready_resp = api_client.put(
             f"{BASE_URL}/api/template-library/{cloned['id']}",
@@ -114,7 +114,7 @@ class TestTemplateArchiveAndUserAccess:
         assert archive_resp.status_code == 200
         archived_template = archive_resp.json()
         assert archived_template["id"] == cloned["id"]
-        assert archived_template["archived"] is True
+        assert archived_template["archived"]
         assert archived_template["status"] == "draft"
 
         active_after_resp = api_client.get(f"{BASE_URL}/api/template-library", headers=admin_headers, timeout=20)
@@ -132,7 +132,7 @@ class TestTemplateArchiveAndUserAccess:
         archived_items = archived_list_resp.json()
         archived_match = next((item for item in archived_items if item["id"] == cloned["id"]), None)
         assert archived_match is not None
-        assert archived_match["archived"] is True
+        assert archived_match["archived"]
 
     # permissions check: non-admin cannot archive template
     def test_editor_cannot_archive_template(self, api_client, admin_headers):

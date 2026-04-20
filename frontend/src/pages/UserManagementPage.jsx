@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ const UserManagementPage = ({ currentUser }) => {
 
   const isAdmin = currentUser?.role === "admin";
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [usersResponse, matrixResponse] = await Promise.all([fetchUsers(), fetchRolesMatrix()]);
@@ -37,7 +37,7 @@ const UserManagementPage = ({ currentUser }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -46,7 +46,7 @@ const UserManagementPage = ({ currentUser }) => {
     }
 
     loadData();
-  }, [isAdmin]);
+  }, [isAdmin, loadData]);
 
   const handleCreateUser = async (event) => {
     event.preventDefault();

@@ -65,7 +65,7 @@ def cloned_template(api_client, admin_headers):
     assert clone_resp.status_code == 200
     cloned = clone_resp.json()
     assert cloned["name"] == template_name
-    assert cloned["archived"] is False
+    assert not cloned["archived"]
     assert cloned["status"] == "draft"
     return cloned
 
@@ -111,7 +111,7 @@ class TestTemplateUnarchiveAndSubsectionRemoval:
         )
         assert archive_resp.status_code == 200
         archived = archive_resp.json()
-        assert archived["archived"] is True
+        assert archived["archived"]
         assert archived["status"] == "draft"
 
         archived_list_resp = api_client.get(f"{BASE_URL}/api/template-library/archived", headers=admin_headers, timeout=20)
@@ -119,7 +119,7 @@ class TestTemplateUnarchiveAndSubsectionRemoval:
         archived_list = archived_list_resp.json()
         archived_item = next((item for item in archived_list if item["id"] == cloned_template["id"]), None)
         assert archived_item is not None
-        assert archived_item["archived"] is True
+        assert archived_item["archived"]
 
         ready_when_archived_resp = api_client.get(f"{BASE_URL}/api/template-library/ready", headers=admin_headers, timeout=20)
         assert ready_when_archived_resp.status_code == 200
@@ -133,7 +133,7 @@ class TestTemplateUnarchiveAndSubsectionRemoval:
         )
         assert unarchive_resp.status_code == 200
         unarchived = unarchive_resp.json()
-        assert unarchived["archived"] is False
+        assert not unarchived["archived"]
         assert unarchived["status"] == "draft"
 
         active_after_resp = api_client.get(f"{BASE_URL}/api/template-library", headers=admin_headers, timeout=20)
@@ -141,7 +141,7 @@ class TestTemplateUnarchiveAndSubsectionRemoval:
         active_after = active_after_resp.json()
         active_item = next((item for item in active_after if item["id"] == cloned_template["id"]), None)
         assert active_item is not None
-        assert active_item["archived"] is False
+        assert not active_item["archived"]
         assert active_item["status"] == "draft"
 
         ready_after_unarchive_resp = api_client.get(f"{BASE_URL}/api/template-library/ready", headers=admin_headers, timeout=20)

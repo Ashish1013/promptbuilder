@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ const DraftsPage = ({ role }) => {
 
   const canDelete = role === "admin" || role === "editor";
 
-  const loadDrafts = async () => {
+  const loadDrafts = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetchPromptDrafts();
@@ -24,11 +24,11 @@ const DraftsPage = ({ role }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadDrafts();
-  }, []);
+  }, [loadDrafts]);
 
   const handleDeleteDraft = async (draftId) => {
     if (!canDelete) {

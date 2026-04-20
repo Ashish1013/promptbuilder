@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,15 +51,8 @@ export const SectionCard = ({
     ? (section.subsections || []).filter((subsection) => subsection.enabled)
     : section.subsections || [];
 
-  const sectionDefinitionMap = useMemo(
-    () => getDefinitionMap(section.variable_definitions || []),
-    [section.variable_definitions],
-  );
-
-  const sectionVariableKeys = useMemo(
-    () => mergeVariableKeys(section.raw_text),
-    [section.raw_text],
-  );
+  const sectionDefinitionMap = getDefinitionMap(section.variable_definitions || []);
+  const sectionVariableKeys = mergeVariableKeys(section.raw_text);
 
   const updateSectionField = (field, value) => {
     onSectionUpdate({

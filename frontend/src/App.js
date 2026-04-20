@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "@/App.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import {
-  AUTH_TOKEN_STORAGE_KEY,
   clearAuthSession,
   fetchMe,
+  getAuthTokenFromStorage,
   getAuthUserFromStorage,
   saveAuthSession,
 } from "@/lib/api";
@@ -37,30 +37,30 @@ function App() {
   const [currentUser, setCurrentUser] = useState(() => getAuthUserFromStorage());
   const [authLoading, setAuthLoading] = useState(true);
 
-  useEffect(() => {
-    const hydrateSession = async () => {
-      const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
-      const storedUser = getAuthUserFromStorage();
+  const hydrateSession = useCallback(async () => {
+    const token = getAuthTokenFromStorage();
+    const storedUser = getAuthUserFromStorage();
 
-      if (!token || !storedUser) {
-        setAuthLoading(false);
-        return;
-      }
+    if (!token || !storedUser) {
+      setAuthLoading(false);
+      return;
+    }
 
-      try {
-        const user = await fetchMe();
-        saveAuthSession(token, user);
-        setCurrentUser(user);
-      } catch (error) {
-        clearAuthSession();
-        setCurrentUser(null);
-      } finally {
-        setAuthLoading(false);
-      }
-    };
-
-    hydrateSession();
+    try {
+      const user = await fetchMe();
+      saveAuthSession(token, user);
+      setCurrentUser(user);
+    } catch (error) {
+      clearAuthSession();
+      setCurrentUser(null);
+    } finally {
+      setAuthLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    hydrateSession();
+  }, [hydrateSession]);
 
   const handleLoginSuccess = (token, user) => {
     saveAuthSession(token, user);

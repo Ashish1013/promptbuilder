@@ -67,12 +67,12 @@ class TestTemplateStructurePersonaLanguage:
         assert "Agent Persona" in persona["name"]
 
         variable_map = {variable["key"]: variable for variable in persona.get("variables", [])}
-        assert variable_map["agent_name"]["required"] is True
-        assert variable_map["agent_role"]["required"] is True
-        assert variable_map["agent_objective"]["required"] is True
+        assert variable_map["agent_name"]["required"]
+        assert variable_map["agent_role"]["required"]
+        assert variable_map["agent_objective"]["required"]
 
         gender = variable_map["agent_gender"]
-        assert gender["required"] is True
+        assert gender["required"]
         assert gender["input_type"] == "select"
         assert set(gender.get("options", [])) == {"male", "female", "neutral"}
 
@@ -86,13 +86,13 @@ class TestTemplateStructurePersonaLanguage:
             None,
         )
         assert company_details is not None
-        assert company_details["enabled_by_default"] is False
+        assert not company_details["enabled_by_default"]
 
         company_variables = {variable["key"]: variable for variable in company_details.get("variables", [])}
-        assert company_variables["company_name"]["required"] is False
-        assert company_variables["company_context"]["required"] is False
+        assert not company_variables["company_name"]["required"]
+        assert not company_variables["company_context"]["required"]
         assert company_variables["company_context"]["input_type"] == "textarea"
-        assert company_variables["company_business_outcome"]["required"] is False
+        assert not company_variables["company_business_outcome"]["required"]
 
     # Language Detection section subsections + supported language controls
     def test_language_guidelines_contains_required_subsections_and_controls(self, templates):

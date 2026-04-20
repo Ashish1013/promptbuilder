@@ -4,6 +4,38 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const AUTH_TOKEN_STORAGE_KEY = "reachall-auth-token";
 export const AUTH_USER_STORAGE_KEY = "reachall-auth-user";
 
+const getSessionStorage = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.sessionStorage;
+};
+
+const getStorageItem = (key) => {
+  try {
+    return getSessionStorage()?.getItem(key) || null;
+  } catch (error) {
+    return null;
+  }
+};
+
+const setStorageItem = (key, value) => {
+  try {
+    getSessionStorage()?.setItem(key, value);
+  } catch (error) {
+    // Ignore storage write failures.
+  }
+};
+
+const removeStorageItem = (key) => {
+  try {
+    getSessionStorage()?.removeItem(key);
+  } catch (error) {
+    // Ignore storage remove failures.
+  }
+};
+
 const apiClient = axios.create({
   baseURL: `${BACKEND_URL}/api`,
   timeout: 20000,
@@ -11,15 +43,17 @@ const apiClient = axios.create({
 
 const getStoredUser = () => {
   try {
-    const user = localStorage.getItem(AUTH_USER_STORAGE_KEY);
+    const user = getStorageItem(AUTH_USER_STORAGE_KEY);
     return user ? JSON.parse(user) : null;
   } catch (error) {
     return null;
   }
 };
 
+export const getAuthTokenFromStorage = () => getStorageItem(AUTH_TOKEN_STORAGE_KEY);
+
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+  const token = getAuthTokenFromStorage();
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -29,13 +63,13 @@ apiClient.interceptors.request.use((config) => {
 });
 
 export const saveAuthSession = (token, user) => {
-  localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
-  localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
+  setStorageItem(AUTH_TOKEN_STORAGE_KEY, token);
+  setStorageItem(AUTH_USER_STORAGE_KEY, JSON.stringify(user));
 };
 
 export const clearAuthSession = () => {
-  localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
-  localStorage.removeItem(AUTH_USER_STORAGE_KEY);
+  removeStorageItem(AUTH_TOKEN_STORAGE_KEY);
+  removeStorageItem(AUTH_USER_STORAGE_KEY);
 };
 
 export const getAuthUserFromStorage = () => getStoredUser();

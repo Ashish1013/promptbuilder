@@ -54,8 +54,8 @@ class TestPromptBuilderAPI:
         response = api_client.get(f"{BASE_URL}/api/roles", timeout=20)
         assert response.status_code == 200
         data = response.json()
-        assert data["roles"]["admin"]["can_manage_templates"] is True
-        assert data["roles"]["viewer"]["can_create_prompts"] is False
+        assert data["roles"]["admin"]["can_manage_templates"]
+        assert not data["roles"]["viewer"]["can_create_prompts"]
 
     def test_templates_list_returns_seeded_templates(self, api_client):
         response = api_client.get(f"{BASE_URL}/api/templates", timeout=20)

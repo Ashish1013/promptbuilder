@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -34,7 +34,15 @@ const TemplateLine = ({ text, variableValues, activeVariable }) => {
 };
 
 export const PreviewPane = ({ metadata, sections, compiledPrompt, activeVariable }) => {
-  const enabledSections = sections.filter((section) => section.enabled);
+  const enabledSections = useMemo(() => sections.filter((section) => section.enabled), [sections]);
+  const previewSections = useMemo(
+    () =>
+      enabledSections.map((section) => ({
+        ...section,
+        enabledSubsections: (section.subsections || []).filter((subsection) => subsection.enabled),
+      })),
+    [enabledSections],
+  );
 
   return (
     <div className="pane-scroll space-y-6" data-testid="preview-pane-container">
@@ -68,7 +76,7 @@ export const PreviewPane = ({ metadata, sections, compiledPrompt, activeVariable
       </Card>
 
       <div className="space-y-4" data-testid="preview-section-stack">
-        {enabledSections.map((section) => (
+        {previewSections.map((section) => (
           <Card
             key={section.id}
             className="overflow-hidden border-slate-200 bg-white shadow-sm"
@@ -87,9 +95,7 @@ export const PreviewPane = ({ metadata, sections, compiledPrompt, activeVariable
                 </div>
               </div>
 
-              {section.subsections
-                .filter((subsection) => subsection.enabled)
-                .map((subsection) => (
+              {section.enabledSubsections.map((subsection) => (
                   <div
                     key={subsection.id}
                     className="rounded-lg border border-slate-200 bg-white p-4"

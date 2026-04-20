@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/components/ui/sonner";
 import { Badge } from "@/components/ui/badge";
@@ -11,21 +11,21 @@ const ActivityPage = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const loadActivity = async () => {
-      setLoading(true);
-      try {
-        const response = await fetchActivityTable();
-        setRows(response.rows || []);
-      } catch (error) {
-        toast.error(error?.response?.data?.detail || "Unable to load activity table.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadActivity();
+  const loadActivity = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetchActivityTable();
+      setRows(response.rows || []);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Unable to load activity table.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadActivity();
+  }, [loadActivity]);
 
   if (loading) {
     return (

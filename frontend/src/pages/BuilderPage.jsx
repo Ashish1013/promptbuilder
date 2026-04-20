@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Copy, Download, RotateCcw, Save } from "lucide-react";
@@ -54,69 +54,69 @@ const BuilderPage = ({ currentUser }) => {
   const navigate = useNavigate();
 
   const isReadOnly = currentUser?.role === "viewer";
-  const compiledOutput = useMemo(() => compilePromptOutput(sections), [sections]);
-  const selectedSections = useMemo(() => sections.filter((section) => section.enabled), [sections]);
+  const compiledOutput = compilePromptOutput(sections);
+  const selectedSections = sections.filter((section) => section.enabled);
 
   useEffect(() => {
     if (!isPromptManuallyEdited) {
       setPromptEditorText(compiledOutput.compiledPrompt);
     }
-  }, [compiledOutput.compiledPrompt, isPromptManuallyEdited]);
-
-  const loadBuilderState = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [templatesResponse, readyTemplatesResponse, promptDraftsResponse] = await Promise.all([
-        fetchTemplateLibrary(),
-        fetchReadyTemplates(),
-        fetchPromptDrafts(),
-      ]);
-      setReadyTemplates(readyTemplatesResponse);
-      setPromptRows(promptDraftsResponse);
-
-      const params = new URLSearchParams(location.search);
-      const draftIdFromUrl = params.get("draftId");
-
-      if (draftIdFromUrl) {
-        const draft = await fetchPromptDraft(draftIdFromUrl);
-        const sourceTemplate = templatesResponse.find((template) => template.id === draft.template_id);
-        const hydratedSections = sourceTemplate
-          ? hydrateDraftSectionsFromTemplates(draft.sections, sourceTemplate.sections)
-          : hydrateDraftSectionsFromTemplates(draft.sections, []);
-
-        setDraftId(draft.id);
-        setMetadata({
-          title: draft.title,
-          customer_name: draft.customer_name,
-          use_case: draft.use_case,
-          template_id: draft.template_id,
-          template_name: draft.template_name,
-        });
-        setSections(hydratedSections);
-        setPromptEditorText(draft.compiled_prompt || compilePromptOutput(hydratedSections).compiledPrompt);
-        setIsPromptManuallyEdited(false);
-        setIsBuilderInitialized(true);
-        setSetupTemplateId(draft.template_id || "");
-        setSetupPromptName(draft.title || "");
-        return;
-      }
-
-      setDraftId("");
-      setMetadata(EMPTY_METADATA);
-      setSections([]);
-      setPromptEditorText("");
-      setIsPromptManuallyEdited(false);
-      setIsBuilderInitialized(false);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Unable to load prompt builder workspace.");
-    } finally {
-      setLoading(false);
-    }
-  }, [location.search]);
+  }, [compiledOutput, isPromptManuallyEdited]);
 
   useEffect(() => {
+    const loadBuilderState = async () => {
+      setLoading(true);
+      try {
+        const [templatesResponse, readyTemplatesResponse, promptDraftsResponse] = await Promise.all([
+          fetchTemplateLibrary(),
+          fetchReadyTemplates(),
+          fetchPromptDrafts(),
+        ]);
+        setReadyTemplates(readyTemplatesResponse);
+        setPromptRows(promptDraftsResponse);
+
+        const params = new URLSearchParams(location.search);
+        const draftIdFromUrl = params.get("draftId");
+
+        if (draftIdFromUrl) {
+          const draft = await fetchPromptDraft(draftIdFromUrl);
+          const sourceTemplate = templatesResponse.find((template) => template.id === draft.template_id);
+          const hydratedSections = sourceTemplate
+            ? hydrateDraftSectionsFromTemplates(draft.sections, sourceTemplate.sections)
+            : hydrateDraftSectionsFromTemplates(draft.sections, []);
+
+          setDraftId(draft.id);
+          setMetadata({
+            title: draft.title,
+            customer_name: draft.customer_name,
+            use_case: draft.use_case,
+            template_id: draft.template_id,
+            template_name: draft.template_name,
+          });
+          setSections(hydratedSections);
+          setPromptEditorText(draft.compiled_prompt || compilePromptOutput(hydratedSections).compiledPrompt);
+          setIsPromptManuallyEdited(false);
+          setIsBuilderInitialized(true);
+          setSetupTemplateId(draft.template_id || "");
+          setSetupPromptName(draft.title || "");
+          return;
+        }
+
+        setDraftId("");
+        setMetadata(EMPTY_METADATA);
+        setSections([]);
+        setPromptEditorText("");
+        setIsPromptManuallyEdited(false);
+        setIsBuilderInitialized(false);
+      } catch (error) {
+        toast.error(error?.response?.data?.detail || "Unable to load prompt builder workspace.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
     loadBuilderState();
-  }, [loadBuilderState]);
+  }, [location.search]);
 
   const updateSectionById = (sectionId, updatedSection) => {
     setSections((prevSections) => prevSections.map((section) => (section.id === sectionId ? updatedSection : section)));
@@ -189,6 +189,7 @@ const BuilderPage = ({ currentUser }) => {
         await navigator.clipboard.writeText(text);
         return true;
       } catch (error) {
+        console.error("Clipboard API copy failed:", error);
         // Fallback to legacy method below.
       }
     }
